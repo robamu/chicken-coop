@@ -43,10 +43,10 @@ const uint8_t STEP_SEQUENCE[8] = {
     0b1001
 };
 
-const uint32_t STEP_COUNT = 2048;
-const bool DIRECTION = true;
+const uint32_t STEP_COUNT = 4096;
+static bool DIRECTION = true;
 
-const uint32_t STEP_DELAY = 20;
+const uint32_t STEP_DELAY = 15;
 
 const gpio_num_t MOTOR_PINS[4] = {
     STEPPER_IN1,
@@ -132,7 +132,7 @@ void ledTask(void* args) {
   }
 }
 
-void driveMotor() {
+void driveMotor(bool direction) {
   for(uint32_t idx = 0; idx < STEP_COUNT; idx++) {
     uint8_t currentSeq = STEP_SEQUENCE[MOTOR_STEP_COUNTER];
     // ESP_LOGI(TAG, "Current sequence for motor step %d: %d",
@@ -142,12 +142,12 @@ void driveMotor() {
       // ESP_LOGI(TAG, "Set high: %d", (int) setHigh);
       gpio_set_level(MOTOR_PINS[motorIdx], setHigh);
     }
-    if(DIRECTION) {
+    if(direction) {
       MOTOR_STEP_COUNTER = (MOTOR_STEP_COUNTER + (8 - 1)) % 8;
     } else {
       MOTOR_STEP_COUNTER = (MOTOR_STEP_COUNTER + 1) % 8;
     }
-    if(idx % 512 == 0) {
+    if(idx % 124 == 0) {
       esp_task_wdt_reset();
     }
     vTaskDelay(STEP_DELAY / portTICK_PERIOD_MS);
@@ -159,8 +159,9 @@ void motorTask(void* args) {
   configureDriverGpios();
 
   while (1) {
+    DIRECTION = !DIRECTION;
     // Handle motor driver code
-    driveMotor();
+    driveMotor(DIRECTION);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
