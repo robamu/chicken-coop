@@ -46,7 +46,7 @@ const uint8_t STEP_SEQUENCE[8] = {
 const uint32_t STEP_COUNT = 4096;
 static bool DIRECTION = true;
 
-const uint32_t STEP_DELAY = 15;
+const uint32_t STEP_DELAY = 5;
 
 const gpio_num_t MOTOR_PINS[4] = {
     STEPPER_IN1,
@@ -133,6 +133,7 @@ void ledTask(void* args) {
 }
 
 void driveMotor(bool direction) {
+  ESP_LOGI("motor", "Driving motor..");
   for(uint32_t idx = 0; idx < STEP_COUNT; idx++) {
     uint8_t currentSeq = STEP_SEQUENCE[MOTOR_STEP_COUNTER];
     // ESP_LOGI(TAG, "Current sequence for motor step %d: %d",
@@ -168,6 +169,6 @@ void motorTask(void* args) {
 
 extern "C" void app_main(void)
 {
-  xTaskCreate(motorTask, "Motor Task", 2048, nullptr, 1, nullptr);
+  xTaskCreate(motorTask, "Motor Task", 2048, nullptr, 0, nullptr);
   ledTask(nullptr);
 }
