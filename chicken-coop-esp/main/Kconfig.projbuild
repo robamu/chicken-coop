@@ -1,4 +1,35 @@
-menu "Example Configuration"
+menu "Chicken Coop Configuration"
+
+    config CHICKEN_COOP_REVOLUTIONS
+        int "Open/Close door revolutions"
+        range 0 36
+        default 12
+        help
+            Number of revolutions to open or close chicken coop door
+
+    config DEFAULT_FULL_OPEN_CLOSE_DURATION
+        int "Open/Close duration [s]"
+        range 50 1000
+        default 120
+        help
+            Full duration to open or close the door in seconds
+
+    config STEPPER_IN1_PORT
+        int "GPIO port for IN1 of driver"
+        range 0 48
+        default 4
+    config STEPPER_IN2_PORT
+        int "GPIO port for IN2 of driver"
+        range 0 48
+        default 5
+    config STEPPER_IN3_PORT
+        int "GPIO port for IN3 of driver"
+        range 0 48
+        default 6
+    config STEPPER_IN4_PORT
+        int "GPIO port for IN4 of driver"
+        range 0 48
+        default 7
 
     choice BLINK_LED
         prompt "Blink LED type"
