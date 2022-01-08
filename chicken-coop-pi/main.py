@@ -29,6 +29,7 @@ motor_pins = [in1, in3, in2, in4]
 
 
 def main():
+    print("Chicken Coop Demo")
     motor_step_counter = 0
     # setting up
     GPIO.setmode(GPIO.BCM)
