@@ -1,11 +1,3 @@
-/* Blink Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
- */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -17,7 +9,8 @@
 
 #include <cstdio>
 
-static const char *TAG = "example";
+static const char *LED_TAG = "led";
+static const char *MOTOR_TAG = "motor";
 
 /* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
    or you can edit the following line and set a number here.
@@ -59,29 +52,29 @@ static uint8_t MOTOR_STEP_COUNTER = 0;
 static uint8_t s_led_state = 0;
 
 #ifdef CONFIG_BLINK_LED_RMT
-static led_strip_t *pStrip_a;
+static led_strip_t *led_strip;
 
 static void blink_led(void)
 {
   /* If the addressable LED is enabled */
   if (s_led_state) {
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    pStrip_a->set_pixel(pStrip_a, 0, 16, 16, 16);
+    led_strip->set_pixel(led_strip, 0, 16, 16, 16);
     /* Refresh the strip to send data */
-    pStrip_a->refresh(pStrip_a, 100);
+    led_strip->refresh(led_strip, 100);
   } else {
     /* Set all LED off to clear all pixels */
-    pStrip_a->clear(pStrip_a, 50);
+    led_strip->clear(led_strip, 50);
   }
 }
 
 static void configureLed(void)
 {
-  ESP_LOGI(TAG, "Example configured to blink addressable LED!");
+  ESP_LOGI(LED_TAG, "Configuring LED");
   /* LED strip initialization with the GPIO and pixels number*/
-  pStrip_a = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
+  led_strip = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
   /* Set all LED off to clear all pixels */
-  pStrip_a->clear(pStrip_a, 50);
+  led_strip->clear(led_strip, 50);
 }
 
 #elif CONFIG_BLINK_LED_GPIO
