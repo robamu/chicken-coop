@@ -6,3 +6,5 @@ set(EXTRA_COMPONENT_DIRS $ENV{IDF_PATH}/examples/common_components/led_strip)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(chicken-coop)
+
+configure_file(main/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/config.h)
