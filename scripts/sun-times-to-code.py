@@ -12,13 +12,15 @@ from io import FileIO
 
 # Tweakable parameters
 PRINT_OPEN_CLOSE_MAP = False
+INPUT = "in"
+OUTPUT = "out"
 SCRIPT_PREFIX = "scripts"
 CSV_FILE_NAME = "open_close_times.csv"
 C_SOURCE_OUTPUT = "open_close_times.cpp"
 C_HEADER_OUTPUT = "open_close_times.h"
 PYTHON_OUTPUT = "open_close_times.py"
 MONTH_COMMENT = "Open-Close times specified as a 2D array for each month"
-MONTH_PREFIX = "OC_TIME_"
+MONTH_PREFIX = "OC_TIMES_"
 
 # Constants
 MONTHS = [
@@ -73,26 +75,27 @@ def main():
 
 
 def gen_c_file(ocm):
-    print(f"Generating {C_SOURCE_OUTPUT}")
-    with open(C_SOURCE_OUTPUT, "w") as f:
+    print(f"Generating {OUTPUT}/{C_SOURCE_OUTPUT}")
+    with open(f"{os.path.join(OUTPUT, C_SOURCE_OUTPUT)}", "w") as f:
         print_header_c(f)
         f.write("\n")
         f.write(f"// {MONTH_COMMENT}\n")
         for idx in range(0, 12):
             write_month_definition_c(f, idx, ocm)
-            f.write("\n")
-    print(f"Generating {C_HEADER_OUTPUT}")
-    with open(C_HEADER_OUTPUT, "w") as f:
+            if idx < 11:
+                f.write("\n")
+    print(f"Generating {OUTPUT}/{C_HEADER_OUTPUT}")
+    with open(f"{os.path.join(OUTPUT, C_HEADER_OUTPUT)}", "w") as f:
         print_header_c(f)
         f.write("\n")
         for idx in range(0, 11):
             write_month_declaration_c(f, idx)
-        f.write("\n")
+            f.write("\n")
 
 
 def gen_py_file(ocm):
     print(f"Generating {PYTHON_OUTPUT}")
-    with open(PYTHON_OUTPUT, "w") as f:
+    with open(f"{OUTPUT}{os.pathsep}{PYTHON_OUTPUT}", "w") as f:
         print_header_py(f)
         f.write("\n")
         f.write(f"# {MONTH_COMMENT}\n")
@@ -136,7 +139,7 @@ def write_month_definition_c(f: FileIO, month_idx: int, ocm: dict):
 
 
 def write_month_declaration_c(f: FileIO, month_idx: int):
-    f.write(f"extern const int {MONTH_PREFIX}{MONTHS[month_idx]}[31][4];\n")
+    f.write(f"extern const int {MONTH_PREFIX}{MONTHS[month_idx]}[31][4];")
 
 
 def write_month_declaration_py(f: FileIO, month_idx: int, ocm: dict):
@@ -161,12 +164,13 @@ def write_month_declaration_py(f: FileIO, month_idx: int, ocm: dict):
 
 
 def gen_open_close_map() -> dict:
-    csv_name = CSV_FILE_NAME
-    if not os.path.exists(CSV_FILE_NAME):
-        if os.path.exists(f"{SCRIPT_PREFIX}/{CSV_FILE_NAME}"):
-            csv_name = f"{SCRIPT_PREFIX}/{CSV_FILE_NAME}"
+    csv_name = os.path.join(INPUT, CSV_FILE_NAME)
+    if not os.path.exists(csv_name):
+        alt_name = os.path.join(SCRIPT_PREFIX, csv_name)
+        if os.path.exists(alt_name):
+            csv_name = alt_name
         else:
-            print(f"No CSV file {CSV_FILE_NAME} found")
+            print(f"No CSV file {csv_name} or {alt_name} found")
             sys.exit(1)
     print(f"Generating map with open and close times from {csv_name}")
     with open(csv_name, "r") as csvfile:
