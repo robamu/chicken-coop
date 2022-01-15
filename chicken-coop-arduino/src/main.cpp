@@ -27,6 +27,9 @@ AccelStepper MY_STEPPER = AccelStepper(
 );
 #endif
 
+void setupRtc();
+void loopRtc();
+
 void loopUsingStepperLib();
 void setupUsingStepperLib();
 
@@ -36,21 +39,36 @@ void setupUsingAccelStepperLib();
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial.println("Stepper example code for the BYJ-48 device");
+  Serial.println("-- Chicken Coop Application --");
   pinMode(LED_BUILTIN, OUTPUT);
   
+#if MOTOR_CONNECTED == 1
 #if LIB_SEL == USE_STEPPER_LIB
   setupUsingStepperLib();
 #else
   setupUsingAccelStepperLib();
 #endif
+#endif
+
+#if DS1307_RTC_CONNECTED == 1
+  setupRtc();
+#endif
+
 }
 
 void loop() {
+
   // put your main code here, to run repeatedly:
+#if MOTOR_CONNECTED == 1
 #if LIB_SEL == USE_STEPPER_LIB
   loopUsingStepperLib();
 #else
   loopUsingAccelStepperLib();
 #endif
+#endif
+
+#if DS1307_RTC_CONNECTED == 1
+  loopRtc();
+#endif
+  delay(1000);
 }

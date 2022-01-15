@@ -51,11 +51,13 @@ def chicken_coop():
     if MOTOR_CONNECTED:
         motor_thread = threading.Thread(target=motor_task)
         motor_thread.start()
-    if DS1307_RTC_CONNECTED:
-        i2c = board.I2C()
-        rtc = adafruit_ds1307.DS1307(i2c)
-        t = time.localtime()
-        rtc.datetime = t
+    while True:
+        if DS1307_RTC_CONNECTED:
+            i2c = board.I2C()
+            rtc = adafruit_ds1307.DS1307(i2c)
+            t = time.localtime()
+            rtc.datetime = t
+            time.sleep(1.0)
 
 
 def motor_task():
@@ -78,7 +80,7 @@ def motor_task():
     GPIO.output(IN4, GPIO.LOW)
     motor_step_counter = 0
     while True:
-        # the meat
+        # Motor control
         for i in range(STEP_COUNT):
             for pin in range(0, len(MOTOR_PINS)):
                 GPIO.output(MOTOR_PINS[pin], STEP_SEQUENCE[motor_step_counter][pin])
@@ -94,11 +96,12 @@ def motor_task():
 
 
 def cleanup():
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.LOW)
-    GPIO.output(IN3, GPIO.LOW)
-    GPIO.output(IN4, GPIO.LOW)
-    GPIO.cleanup()
+    if MOTOR_CONNECTED:
+        GPIO.output(IN1, GPIO.LOW)
+        GPIO.output(IN2, GPIO.LOW)
+        GPIO.output(IN3, GPIO.LOW)
+        GPIO.output(IN4, GPIO.LOW)
+        GPIO.cleanup()
 
 
 if __name__ == "__main__":

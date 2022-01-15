@@ -3,6 +3,12 @@
 
 #include <cstdint>
 
+#define DS1307_RTC_CONNECTED    1
+#define MOTOR_CONNECTED         0
+// Set this to 1 to reload the time on the RTC to the current time
+// The compile time of this script will be used as the current time
+#define FORCE_TIME_RELOAD       0
+
 // User configuration defines
 #define USE_STEPPER_LIB         0
 #define USE_ACCEL_STEPPER_LIB   1
