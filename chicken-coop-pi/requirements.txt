@@ -1,0 +1,1 @@
+adafruit-circuitpython-ds1307 ~= 2.1.8
