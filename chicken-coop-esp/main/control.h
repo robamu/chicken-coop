@@ -33,6 +33,8 @@ class Controller {
   static constexpr gpio_num_t I2C_SDA = static_cast<gpio_num_t>(CONFIG_I2C_SDA_PORT);
   static constexpr gpio_num_t I2C_SCL = static_cast<gpio_num_t>(CONFIG_I2C_SCL_PORT);
 
+  static constexpr gpio_num_t DOOR_SWITCH_PORT = static_cast<gpio_num_t>(CONFIG_DOOR_SWITCH_STATE_PORT);
+
   tm currentTime = {};
   // Internal state
   DoorStates doorState = DoorStates::UNKNOWN;
@@ -41,6 +43,7 @@ class Controller {
 
   bool openExecuted = false;
   bool closeExecuted = false;
+
 
   // Day from 0 to 30
   int currentDay = 0;

@@ -20,6 +20,23 @@ menu "Chicken Coop Configuration"
         help
             Maps the motor revolution direction to whether the door is opened or closed
 
+    config I2C_SDA_PORT
+        int "GPIO port for the I2C SDA"
+        range 0 48
+        default 0
+    config I2C_SCL_PORT
+        int "GPIO port for the I2C SCL"
+        range 0 48
+        default 1
+
+    config DOOR_SWITCH_STATE_PORT
+        int "GPIO port to detect door state"
+        range 0 48
+        default 2
+        help
+            A switch should be connected at this port, indicating whether the door
+            is opened or closed
+
     config STEPPER_IN1_PORT
         int "GPIO port for IN1 of driver"
         range 0 48
@@ -36,15 +53,6 @@ menu "Chicken Coop Configuration"
         int "GPIO port for IN4 of driver"
         range 0 48
         default 7
-
-    config I2C_SDA_PORT
-        int "GPIO port for the I2C SDA"
-        range 0 48
-        default 8
-    config I2C_SCL_PORT
-        int "GPIO port for the I2C SCL"
-        range 0 48
-        default 9
 
     choice BLINK_LED
         prompt "Blink LED type"
