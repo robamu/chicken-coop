@@ -1,6 +1,9 @@
 #include "led.h"
-#include "led_strip.h"
+
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "led_strip.h"
 
 static const char *LED_TAG = "led";
 
@@ -9,8 +12,18 @@ static const char *LED_TAG = "led";
 static led_strip_t *led_strip;
 bool LED_STATE = true;
 
-void blinkLed(void)
-{
+void ledTask(void *args) {
+  // Configure the peripheral according to the LED type
+  configureLed();
+
+  while (true) {
+    // ESP_LOGI(TAG, "Turning the LED %s!", s_led_state == true ? "ON" : "OFF");
+    blinkLed();
+    vTaskDelay(CONFIG_BLINK_PERIOD / portTICK_PERIOD_MS);
+  }
+}
+
+void blinkLed(void) {
   /* If the addressable LED is enabled */
   if (LED_STATE) {
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
@@ -24,8 +37,7 @@ void blinkLed(void)
   LED_STATE = !LED_STATE;
 }
 
-void configureLed(void)
-{
+void configureLed(void) {
   ESP_LOGI(LED_TAG, "Configuring LED");
   /* LED strip initialization with the GPIO and pixels number*/
   led_strip = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
@@ -35,14 +47,12 @@ void configureLed(void)
 
 #elif CONFIG_BLINK_LED_GPIO
 
-void blink_led(void)
-{
+void blink_led(void) {
   /* Set the GPIO level according to the state (LOW or HIGH)*/
   gpio_set_level(BLINK_GPIO, s_led_state);
 }
 
-void configure_led(void)
-{
+void configure_led(void) {
   ESP_LOGI(TAG, "Example configured to blink GPIO LED!");
   gpio_reset_pin(BLINK_GPIO);
   /* Set the GPIO as a push/pull output */
@@ -50,5 +60,3 @@ void configure_led(void)
 }
 
 #endif
-
-

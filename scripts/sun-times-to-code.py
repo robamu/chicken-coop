@@ -6,6 +6,7 @@ import os
 import copy
 import dataclasses
 import pprint
+import shutil
 from datetime import datetime
 from io import FileIO
 
@@ -19,6 +20,9 @@ CSV_FILE_NAME = "open_close_times.csv"
 C_SOURCE_OUTPUT = "open_close_times.cpp"
 C_HEADER_OUTPUT = "open_close_times.h"
 PYTHON_OUTPUT = "open_close_times.py"
+C_DEST_ESP = "../chicken-coop-esp/main"
+C_DEST_ARDUINO = "../chicken-coop-arduino/src"
+PY_DEST_RPI =  "../chicken-coop-pi"
 MONTH_COMMENT = "Open-Close times specified as a 2D array for each month"
 MONTH_PREFIX = "OC_TIMES_"
 
@@ -37,6 +41,9 @@ MONTHS = [
     "NOVEMBER",
     "DECEMBER",
 ]
+C_SOURCE_FULL_PATH = os.path.join(OUTPUT, C_SOURCE_OUTPUT)
+C_HEADER_FULL_PATH = os.path.join(OUTPUT, C_HEADER_OUTPUT)
+PYTHON_FULL_OUTPUT = os.path.join(OUTPUT, PYTHON_OUTPUT)
 
 
 @dataclasses.dataclass
@@ -61,6 +68,10 @@ def main():
     parser.add_argument(
         "-t", "--type", help="Output code language", choices=["c", "py"], default="c"
     )
+    parser.add_argument(
+        "-c", "--copy", help="Copy files to destination directory", action="store_true",
+        default=False
+    )
     args = parser.parse_args()
     print("-- Sun times to code generator --")
     ocm = gen_open_close_map()
@@ -71,26 +82,29 @@ def main():
     else:
         print("No supported output code type detected")
         sys.exit(0)
+    if args.copy:
+        if args.type == "c":
+            cp_file_to_dest(C_SOURCE_FULL_PATH, C_DEST_ARDUINO)
+            cp_file_to_dest(C_HEADER_FULL_PATH, C_DEST_ARDUINO)
+            cp_file_to_dest(C_SOURCE_FULL_PATH, C_DEST_ESP)
+            cp_file_to_dest(C_HEADER_FULL_PATH, C_DEST_ESP)
+        elif args.type == "py":
+            cp_file_to_dest(PYTHON_FULL_OUTPUT, PY_DEST_RPI)
     print("Done")
 
 
-def gen_c_file(ocm):
-    print(f"Generating {OUTPUT}/{C_SOURCE_OUTPUT}")
-    with open(f"{os.path.join(OUTPUT, C_SOURCE_OUTPUT)}", "w") as f:
-        print_header_c(f)
-        f.write("\n")
-        f.write(f"// {MONTH_COMMENT}\n")
-        for idx in range(0, 12):
-            write_month_definition_c(f, idx, ocm)
-            if idx < 11:
-                f.write("\n")
-    print(f"Generating {OUTPUT}/{C_HEADER_OUTPUT}")
-    with open(f"{os.path.join(OUTPUT, C_HEADER_OUTPUT)}", "w") as f:
-        print_header_c(f)
-        f.write("\n")
-        for idx in range(0, 11):
-            write_month_declaration_c(f, idx)
-            f.write("\n")
+def cp_file_to_dest(source: str, dest: str):
+    print(f"Copy {source} to {dest}")
+    try:
+        if os.path.exists(source):
+            if os.path.exists(dest):
+                shutil.copy(source, dest)
+            else:
+                print(f"Copy operation: Destination {dest} not found")
+        else:
+            print(f"Copy Operation: Source file {source} does not exists")
+    except IsADirectoryError as e:
+        print(f"Copy Operation: Failed with error: {e}")
 
 
 def gen_py_file(ocm):
@@ -102,6 +116,45 @@ def gen_py_file(ocm):
         for idx in range(0, 12):
             write_month_declaration_py(f, idx, ocm)
             f.write("\n")
+
+
+def gen_c_file(ocm):
+    print(f"Generating {OUTPUT}/{C_SOURCE_OUTPUT}")
+    with open(f"{os.path.join(OUTPUT, C_SOURCE_OUTPUT)}", "w") as f:
+        print_header_c(f)
+        f.write("\n")
+        f.write("#include \"open_close_times.h\"\n")
+        f.write("\n")
+        print_open_close_months_definition(f)
+        f.write(f"// {MONTH_COMMENT}\n")
+        for idx in range(0, 12):
+            write_month_definition_c(f, idx, ocm)
+            if idx < 11:
+                f.write("\n")
+    print(f"Generating {OUTPUT}/{C_HEADER_OUTPUT}")
+    with open(f"{os.path.join(OUTPUT, C_HEADER_OUTPUT)}", "w") as f:
+        print_header_c(f)
+        f.write("\n")
+        f.write("// Wrapper to allow clean typedef\n")
+        f.write("typedef struct OcTableWrapper {\n")
+        f.write("    int month[31][4];\n")
+        f.write("};\n")
+        f.write("\n")
+        f.write("// Structure to access months via array index 0 to 11\n")
+        f.write("extern const OcTableWrapper* OPEN_CLOSE_MONTHS[12];\n")
+        f.write("\n")
+        for idx in range(0, 12):
+            write_month_declaration_c(f, idx)
+            if idx < 11:
+                f.write("\n")
+
+
+def print_open_close_months_definition(f: FileIO):
+    f.write("const OcTableWrapper* OPEN_CLOSE_MONTHS[12] = {\n")
+    for month_idx in range(0, 12):
+        f.write(f"    &{MONTH_PREFIX}{MONTHS[month_idx]},\n")
+    f.write("};\n")
+    f.write("\n")
 
 
 def print_header_c(f: FileIO):
@@ -118,7 +171,8 @@ def print_header_py(f: FileIO):
 
 
 def write_month_definition_c(f: FileIO, month_idx: int, ocm: dict):
-    f.write(f"const int {MONTH_PREFIX}{MONTHS[month_idx]}[31][4] = {{\n")
+    f.write(f"const OcTableWrapper {MONTH_PREFIX}{MONTHS[month_idx]} = {{\n")
+    f.write("    .month = {\n")
     for day_idx in range(0, 31):
         sep = ","
         if day_idx == 30:
@@ -127,19 +181,21 @@ def write_month_definition_c(f: FileIO, month_idx: int, ocm: dict):
         if month_dict.get(str(day_idx + 1)) != None:
             last_day_info = month_dict[str(day_idx + 1)]
         day_info = last_day_info
+
         f.write(
-            f"    {{"
+            f"        {{"
             f"{day_info.open_hour}, "
             f"{day_info.open_minute}, "
             f"{day_info.close_hour}, "
             f"{day_info.close_minute}"
             f"}}{sep}\n"
         )
+    f.write("    }\n")
     f.write("};\n")
 
 
 def write_month_declaration_c(f: FileIO, month_idx: int):
-    f.write(f"extern const int {MONTH_PREFIX}{MONTHS[month_idx]}[31][4];")
+    f.write(f"extern const OcTableWrapper {MONTH_PREFIX}{MONTHS[month_idx]};")
 
 
 def write_month_declaration_py(f: FileIO, month_idx: int, ocm: dict):

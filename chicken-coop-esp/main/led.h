@@ -8,6 +8,8 @@
  */
 #define BLINK_GPIO CONFIG_BLINK_GPIO
 
+void ledTask(void* args);
+
 void blinkLed(void);
 void configureLed(void);
 

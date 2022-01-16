@@ -4,9 +4,9 @@
  */
 
 // Wrapper to allow clean typedef
-typedef struct OcTableWrapper {
-    int month[31][4];
-};
+typedef struct {
+  int month[31][4];
+} OcTableWrapper;
 
 // Structure to access months via array index 0 to 11
 extern const OcTableWrapper* OPEN_CLOSE_MONTHS[12];
