@@ -1,35 +1,54 @@
 #include "control.h"
 
+#include "compile_time.h"
+#include "ds3231.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "open_close_times.h"
+#include "usr_config.h"
 
 Controller::Controller() {}
 
-void Controller::taskEntryPoint(void *args) {
+void Controller::taskEntryPoint(void* args) {
   Controller ctrl;
   ctrl.taskLoop();
 }
 
 void Controller::taskLoop() {
-  // TODO:
-  // 1. Read Clock time
-  // 2. Check whether a new day has started
-  // 3. If new day has started reset two
-  if (appState == AppStates::INIT) {
-    // TODO: Initialization or reboot, door state unknown. Get it from switch
-    // ...
-    int result = performInitMode();
-    if (result == 0) {
-      // If everything is done
-      appState = AppStates::IDLE;
+  while (true) {
+    i2cdev_init();
+    esp_err_t result = ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL);
+    if (result != ESP_OK) {
+      // print error
     }
-  } else {
-    performIdleMode();
+
+#if APP_FORCE_TIME_RELOAD == 1
+    // Set compile time
+    time_t seconds = __TIME_UNIX__;
+    tm* time = localtime(&seconds);
+    ds3231_set_time(&i2c, time);
+#endif
+
+    ds3231_get_time(&i2c, &currentTime);
+    // TODO:
+    // 1. Read Clock time
+    // 2. Check whether a new day has started
+    // 3. If new day has started reset two
+    if (appState == AppStates::INIT) {
+      // TODO: Initialization or reboot, door state unknown. Get it from switch
+      // ...
+      int result = performInitMode();
+      if (result == 0) {
+        // If everything is done
+        appState = AppStates::IDLE;
+      }
+    } else {
+      performIdleMode();
+    }
+    // This would be the place to enter sleep mode to save power..
+    // For now, delay for 20 seconds
+    vTaskDelay(20000);
   }
-  // This would be the place to enter sleep mode to save power..
-  // For now, delay for 20 seconds
-  vTaskDelay(20000);
 }
 
 int Controller::performInitMode() {

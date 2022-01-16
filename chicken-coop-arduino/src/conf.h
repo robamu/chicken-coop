@@ -7,7 +7,7 @@
 #define MOTOR_CONNECTED         0
 // Set this to 1 to reload the time on the RTC to the current time
 // The compile time of this script will be used as the current time
-#define FORCE_TIME_RELOAD       0
+#define FORCE_TIME_RELOAD       1
 
 // User configuration defines
 #define USE_STEPPER_LIB         0

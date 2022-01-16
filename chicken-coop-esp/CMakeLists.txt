@@ -1,10 +1,25 @@
 # The following lines of boilerplate have to be in your project's
 # CMakeLists in this exact order for cmake to work correctly
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
-set(EXTRA_COMPONENT_DIRS $ENV{IDF_PATH}/examples/common_components/led_strip)
+include(FetchContent)
+
+# Make available additional drivers for the DS3231 RTC device
+FetchContent_Declare(
+  espidflib
+  GIT_REPOSITORY https://github.com/UncleRus/esp-idf-lib.git
+)
+FetchContent_MakeAvailable(espidflib)
+
+set(EXTRA_COMPONENT_DIRS
+    # $ENV{IDF_PATH}/examples/common_components/led_strip
+    ${espidflib_SOURCE_DIR}/components
+)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+option(APP_FORCE_TIME_RELOAD "Force setting of compile time to the connected RTC" OFF)
+
 project(chicken-coop)
 
 set(APP_VERSION_MAJOR 0)

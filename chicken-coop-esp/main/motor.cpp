@@ -1,11 +1,14 @@
 #include "motor.h"
+#include "main.h"
 
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "hal/gpio_types.h"
+#include "sdkconfig.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "hal/gpio_types.h"
 
 static constexpr gpio_num_t STEPPER_IN1 = static_cast<gpio_num_t>(CONFIG_STEPPER_IN1_PORT);
 static constexpr gpio_num_t STEPPER_IN2 = static_cast<gpio_num_t>(CONFIG_STEPPER_IN2_PORT);
@@ -19,8 +22,6 @@ static const char MOTOR_TAG[] = "motor";
 const uint8_t STEP_SEQUENCE[8] = {0b1000, 0b1010, 0b0010, 0b0110, 0b0100, 0b0101, 0b0001, 0b1001};
 
 const uint32_t STEP_COUNT = 4096;
-
-static bool DIRECTION = true;
 
 const gpio_num_t MOTOR_PINS[4] = {STEPPER_IN1, STEPPER_IN3, STEPPER_IN2, STEPPER_IN4};
 static uint8_t MOTOR_STEP_COUNTER = 0;
@@ -38,10 +39,29 @@ void motorTask(void* args) {
   uint32_t stepDelayMs = fullOpenCloseDuration * 1000 / 12 / 4096;
   ESP_LOGI(MOTOR_TAG, "Calculated delay between steps: %d milliseconds", stepDelayMs);
   while (1) {
-    DIRECTION = !DIRECTION;
+    uint32_t notificationValue = 0;
+    // Wait for the control task to notify the motor task
+    xTaskNotifyWait(BIT_MASK_ALL, BIT_MASK_ALL, &notificationValue, portMAX_DELAY);
+
+    Direction direction = Direction::CLOCK_WISE;
+    if ((notificationValue & BIT_MASK_OPEN) == BIT_MASK_OPEN) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+      direction = Direction::CLOCK_WISE;
+#else
+      direction = Direction::COUNTER_CLOCK_WISE;
+#endif
+    } else if ((notificationValue & BIT_MASK_CLOSE) == BIT_MASK_CLOSE) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+      direction = Direction::COUNTER_CLOCK_WISE;
+#else
+      direction = Direction::CLOCK_WISE;
+#endif
+    }
     // Handle motor driver code
-    driveChickenCoop(DIRECTION, stepDelayMs);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    driveChickenCoop(direction, stepDelayMs);
+
+    // notify the control task that the process is done
+    xTaskNotifyGive(&CONTROL_TASK_HANDLE);
   }
 }
 
@@ -72,7 +92,7 @@ void printMotorDrive(bool direction) {
   ESP_LOGI(MOTOR_TAG, "Driving motor %s for one revolution", dirString);
 }
 
-void driveMotor(bool direction, bool print, uint32_t stepDelayMs) {
+void driveMotor(Direction direction, bool print, uint32_t stepDelayMs) {
   if (print) {
     printMotorDrive(direction);
   }
@@ -85,9 +105,9 @@ void driveMotor(bool direction, bool print, uint32_t stepDelayMs) {
       // ESP_LOGI(TAG, "Set high: %d", (int) setHigh);
       gpio_set_level(MOTOR_PINS[motorIdx], setHigh);
     }
-    if (direction) {
+    if (direction == Direction::CLOCK_WISE) {
       MOTOR_STEP_COUNTER = (MOTOR_STEP_COUNTER + (8 - 1)) % 8;
-    } else {
+    } else if (direction == Direction::COUNTER_CLOCK_WISE) {
       MOTOR_STEP_COUNTER = (MOTOR_STEP_COUNTER + 1) % 8;
     }
     if (idx % 124 == 0) {
@@ -97,7 +117,7 @@ void driveMotor(bool direction, bool print, uint32_t stepDelayMs) {
   }
 }
 
-void driveChickenCoop(bool direction, uint32_t stepDelayMs) {
+void driveChickenCoop(Direction direction, uint32_t stepDelayMs) {
   const char* dirString = nullptr;
   if (direction) {
     dirString = "clockwise";

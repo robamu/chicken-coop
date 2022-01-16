@@ -14,6 +14,12 @@ menu "Chicken Coop Configuration"
         help
             Full duration to open or close the door in seconds
 
+    config CLOCKWISE_IS_OPEN
+        bool "Clockwise motor direction means opening the door"
+        default True
+        help
+            Maps the motor revolution direction to whether the door is opened or closed
+
     config STEPPER_IN1_PORT
         int "GPIO port for IN1 of driver"
         range 0 48
@@ -30,6 +36,15 @@ menu "Chicken Coop Configuration"
         int "GPIO port for IN4 of driver"
         range 0 48
         default 7
+
+    config I2C_SDA_PORT
+        int "GPIO port for the I2C SDA"
+        range 0 48
+        default 8
+    config I2C_SCL_PORT
+        int "GPIO port for the I2C SCL"
+        range 0 48
+        default 9
 
     choice BLINK_LED
         prompt "Blink LED type"
