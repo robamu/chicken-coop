@@ -10,6 +10,9 @@
 #include "switch.h"
 #include "usr_config.h"
 
+QueueHandle_t Controller::UART_QUEUE = nullptr;
+uart_config_t Controller::UART_CFG = {};
+
 Controller::Controller() {}
 
 void Controller::taskEntryPoint(void* args) {
@@ -19,28 +22,19 @@ void Controller::taskEntryPoint(void* args) {
 
 void Controller::task() {
   esp_task_wdt_add(nullptr);
-  uartInit();
+  esp_log_level_set(CTRL_TAG, ESP_LOG_DEBUG);
   ESP_ERROR_CHECK(i2cdev_init());
   ESP_ERROR_CHECK(ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL));
-  uart_event_t event;
   while (true) {
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_task_wdt_reset());
     // Handle all events
-    while (xQueueReceive(uartQueue, reinterpret_cast<void*>(&event), 0)) {
-      switch (event.type) {
-        case (UART_PATTERN_DET): {
-          int pos = uart_pattern_pop_pos(UART_NUM);
-          int nextPos = uart_pattern_pop_pos(UART_NUM);
-          ESP_LOGI(CTRL_TAG, "Detected UART pattern. Position: %d, next position: %d", pos,
-                   nextPos);
-          break;
-        }
-        default: {
-          ESP_LOGE(CTRL_TAG, "Unknown event type");
-        }
-      }
+    size_t len = 0;
+    uart_get_buffered_data_len(UART_NUM, &len);
+    //(UART_NUM, UART_RECV_BUF, &len, 0);
+    if (len > 0) {
+      ESP_LOGI(CTRL_TAG, "Received %d bytes on UART", len);
     }
-
+    handleUartReception();
 #if APP_FORCE_TIME_RELOAD == 1
     // Set compile time
     time_t seconds = __TIME_UNIX__;
@@ -210,18 +204,36 @@ void Controller::updateDoorState() {
 }
 
 void Controller::uartInit() {
-  uartCfg.baud_rate = 115200;
-  uartCfg.data_bits = UART_DATA_8_BITS;
-  uartCfg.parity = UART_PARITY_DISABLE;
-  uartCfg.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
-  uartCfg.stop_bits = UART_STOP_BITS_1;
-  ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uartCfg));
+  UART_CFG.baud_rate = 115200;
+  UART_CFG.data_bits = UART_DATA_8_BITS;
+  UART_CFG.parity = UART_PARITY_DISABLE;
+  UART_CFG.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+  UART_CFG.stop_bits = UART_STOP_BITS_1;
+  ESP_ERROR_CHECK(uart_driver_install(UART_NUM, UART_RING_BUF_SIZE, UART_RING_BUF_SIZE,
+                                      UART_QUEUE_DEPTH, &UART_QUEUE, 0));
+  ESP_ERROR_CHECK(uart_param_config(UART_NUM, &UART_CFG));
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM, CONFIG_COM_UART_TX, CONFIG_COM_UART_RX, UART_PIN_NO_CHANGE,
                                UART_PIN_NO_CHANGE));
-  ESP_ERROR_CHECK(uart_driver_install(UART_NUM, UART_RING_BUF_SIZE, UART_RING_BUF_SIZE,
-                                      UART_QUEUE_DEPTH, &uartQueue, 0));
   ESP_ERROR_CHECK(uart_enable_pattern_det_baud_intr(UART_NUM, 'C', UART_PATTERN_NUM, 10, 10, 0));
   ESP_ERROR_CHECK(uart_pattern_queue_reset(UART_NUM, UART_QUEUE_DEPTH));
+}
+
+void Controller::handleUartReception() {
+  uart_event_t event;
+  while (xQueueReceive(UART_QUEUE, reinterpret_cast<void*>(&event), 0)) {
+    // ESP_LOGD(CTRL_TAG, "UART Event received");
+    switch (event.type) {
+      case (UART_PATTERN_DET): {
+        int pos = uart_pattern_pop_pos(UART_NUM);
+        int nextPos = uart_pattern_pop_pos(UART_NUM);
+        ESP_LOGI(CTRL_TAG, "Detected UART pattern. Position: %d, next position: %d", pos, nextPos);
+        break;
+      }
+      default: {
+        ESP_LOGE(CTRL_TAG, "Unknown event type");
+      }
+    }
+  }
 }
 
 int Controller::initClose() {

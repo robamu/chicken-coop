@@ -14,6 +14,10 @@ void controlTask(void* args);
 class Controller {
  public:
   Controller();
+  /**
+   * Call before starting the controller task!
+   */
+  static void uartInit();
   static void taskEntryPoint(void* args);
   void task();
 
@@ -38,8 +42,9 @@ class Controller {
 
   static constexpr uart_port_t UART_NUM = UART_NUM_1;
   static constexpr uint8_t UART_PATTERN_NUM = 2;
-  QueueHandle_t uartQueue = nullptr;
-  uart_config_t uartCfg = {};
+  static QueueHandle_t UART_QUEUE;
+  static uart_config_t UART_CFG;
+  std::array<uint8_t, 524> UART_RECV_BUF = {};
   static constexpr size_t UART_RING_BUF_SIZE = 524;
   static constexpr uint8_t UART_QUEUE_DEPTH = 20;
   i2c_dev_t i2c = {};
@@ -57,7 +62,7 @@ class Controller {
   int currentOpenDayMinutes = 0;
   int currentCloseDayMinutes = 0;
 
-  void uartInit();
+  void handleUartReception();
   // Returns 0 if initialization is done, otherwise 1
   int performInitMode();
   void updateDoorState();

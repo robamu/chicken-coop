@@ -27,7 +27,8 @@ extern "C" void app_main(void) {
            CONFIG_STEPPER_IN1_PORT, CONFIG_STEPPER_IN2_PORT, CONFIG_STEPPER_IN3_PORT,
            CONFIG_STEPPER_IN4_PORT);
   doorswitch::init();
-  xTaskCreate(&Controller::taskEntryPoint, "Control Task", 2048, nullptr, TASK_MAX_PRIORITY - 1,
+  Controller::uartInit();
+  xTaskCreate(&Controller::taskEntryPoint, "Control Task", 4096, nullptr, TASK_MAX_PRIORITY - 1,
               &CONTROL_TASK_HANDLE);
   xTaskCreate(motorTask, "Motor Task", 2048, nullptr, TASK_MAX_PRIORITY - 3, &MOTOR_TASK_HANDLE);
   xTaskCreate(ledTask, "LED Task", 2048, nullptr, TASK_MAX_PRIORITY - 5, &LED_TASK_HANDLE);
