@@ -1,14 +1,13 @@
 #include "motor.h"
-#include "main.h"
 
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
-#include "hal/gpio_types.h"
-#include "sdkconfig.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/gpio_types.h"
+#include "main.h"
+#include "sdkconfig.h"
 
 static constexpr gpio_num_t STEPPER_IN1 = static_cast<gpio_num_t>(CONFIG_STEPPER_IN1_PORT);
 static constexpr gpio_num_t STEPPER_IN2 = static_cast<gpio_num_t>(CONFIG_STEPPER_IN2_PORT);
@@ -40,28 +39,30 @@ void motorTask(void* args) {
   ESP_LOGI(MOTOR_TAG, "Calculated delay between steps: %d milliseconds", stepDelayMs);
   while (1) {
     uint32_t notificationValue = 0;
+    esp_task_wdt_reset();
     // Wait for the control task to notify the motor task
-    xTaskNotifyWait(BIT_MASK_ALL, BIT_MASK_ALL, &notificationValue, portMAX_DELAY);
+    BaseType_t retval = xTaskNotifyWait(BIT_MASK_ALL, BIT_MASK_ALL, &notificationValue, 2000);
+    if (retval == pdPASS) {
+      Direction direction = Direction::CLOCK_WISE;
+      if ((notificationValue & BIT_MASK_OPEN) == BIT_MASK_OPEN) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+        direction = Direction::CLOCK_WISE;
+#else
+        direction = Direction::COUNTER_CLOCK_WISE;
+#endif
+      } else if ((notificationValue & BIT_MASK_CLOSE) == BIT_MASK_CLOSE) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+        direction = Direction::COUNTER_CLOCK_WISE;
+#else
+        direction = Direction::CLOCK_WISE;
+#endif
+      }
+      // Handle motor driver code
+      driveChickenCoop(direction, stepDelayMs);
 
-    Direction direction = Direction::CLOCK_WISE;
-    if ((notificationValue & BIT_MASK_OPEN) == BIT_MASK_OPEN) {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-      direction = Direction::CLOCK_WISE;
-#else
-      direction = Direction::COUNTER_CLOCK_WISE;
-#endif
-    } else if ((notificationValue & BIT_MASK_CLOSE) == BIT_MASK_CLOSE) {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-      direction = Direction::COUNTER_CLOCK_WISE;
-#else
-      direction = Direction::CLOCK_WISE;
-#endif
+      // notify the control task that the process is done
+      xTaskNotifyGive(&CONTROL_TASK_HANDLE);
     }
-    // Handle motor driver code
-    driveChickenCoop(direction, stepDelayMs);
-
-    // notify the control task that the process is done
-    xTaskNotifyGive(&CONTROL_TASK_HANDLE);
   }
 }
 

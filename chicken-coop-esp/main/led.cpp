@@ -1,15 +1,16 @@
 #include "led.h"
 
+#include <led_strip.h>
+
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "led_strip.h"
 
 static const char *LED_TAG = "led";
 
 #ifdef CONFIG_BLINK_LED_RMT
 
-static led_strip_t led_strip = {};
+static led_strip_t LED_STRIP = {};
 
 bool LED_STATE = true;
 
@@ -28,16 +29,15 @@ void blinkLed(void) {
   /* If the addressable LED is enabled */
   if (LED_STATE) {
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    rgb_t rgb = rgb_from_values(16, 16, 16);
-    led_strip_fill(&led_strip, 0, 1, rgb);
-    led_strip_flush(&led_strip);
+    led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(16, 16, 16));
+    led_strip_flush(&LED_STRIP);
     /* Refresh the strip to send data */
     // led_strip->refresh(led_strip, 100);
   } else {
     /* Set all LED off to clear all pixels */
     // led_strip->clear(led_strip, 50);
-    led_strip_fill(&led_strip, 0, 1, rgb_from_values(0, 0, 0));
-    led_strip_flush(&led_strip);
+    led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(0, 0, 0));
+    led_strip_flush(&LED_STRIP);
   }
   LED_STATE = !LED_STATE;
 }
@@ -45,13 +45,19 @@ void blinkLed(void) {
 void configureLed(void) {
   ESP_LOGI(LED_TAG, "Configuring LED");
   led_strip_install();
-  led_strip_init(&led_strip);
+  LED_STRIP.gpio = static_cast<gpio_num_t>(CONFIG_BLINK_GPIO);
+  LED_STRIP.type = LED_STRIP_WS2812;
+  LED_STRIP.length = 1;
+  LED_STRIP.channel = static_cast<rmt_channel_t>(CONFIG_BLINK_LED_RMT_CHANNEL);
+  LED_STRIP.brightness = 255;
+
+  ESP_ERROR_CHECK(led_strip_init(&LED_STRIP));
   /* LED strip initialization with the GPIO and pixels number*/
   // led_strip = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
   /* Set all LED off to clear all pixels */
   // led_strip->clear(led_strip, 50);
-  led_strip_fill(&led_strip, 0, 1, rgb_from_values(0, 0, 0));
-  led_strip_flush(&led_strip);
+  led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(0, 0, 0));
+  led_strip_flush(&LED_STRIP);
 }
 
 #elif CONFIG_BLINK_LED_GPIO

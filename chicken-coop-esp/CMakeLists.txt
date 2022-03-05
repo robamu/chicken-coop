@@ -22,6 +22,8 @@ option(APP_FORCE_TIME_RELOAD "Force setting of compile time to the connected RTC
 
 project(chicken-coop)
 
+idf_build_set_property(CXX_COMPILE_OPTIONS "-std=c++17" APPEND)
+
 set(APP_VERSION_MAJOR 0)
 set(APP_VERSION_MINOR 1)
 set(APP_VERSION_REVISION 0)

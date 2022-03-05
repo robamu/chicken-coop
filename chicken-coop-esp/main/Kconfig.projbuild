@@ -20,6 +20,12 @@ menu "Chicken Coop Configuration"
         help
             Maps the motor revolution direction to whether the door is opened or closed
 
+    config INVERT_DOOR_STATE_SWITCH
+        bool "Invert the functions determining whether the door is opened or closed"
+        default False
+        help
+            Useful for hardware configuration changes
+
     config I2C_SDA_PORT
         int "GPIO port for the I2C SDA"
         range 0 48
@@ -53,6 +59,19 @@ menu "Chicken Coop Configuration"
         int "GPIO port for IN4 of driver"
         range 0 48
         default 7
+
+    config COM_UART_RX
+        int "GPIO port for the UART RX pin"
+        range 0 48
+        default 19
+        help
+            Can be used for communication with the ESP32
+    config COM_UART_TX
+        int "GPIO port for the UART TX pin"
+        range 0 48
+        default 18
+        help
+            Can be used for communication with the ESP32
 
     choice BLINK_LED
         prompt "Blink LED type"

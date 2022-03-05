@@ -2,24 +2,43 @@
 
 #include "compile_time.h"
 #include "ds3231.h"
+#include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "open_close_times.h"
+#include "switch.h"
 #include "usr_config.h"
 
 Controller::Controller() {}
 
 void Controller::taskEntryPoint(void* args) {
   Controller ctrl;
-  ctrl.taskLoop();
+  ctrl.task();
 }
 
-void Controller::taskLoop() {
+void Controller::task() {
+  esp_task_wdt_add(nullptr);
+  uartInit();
+  ESP_ERROR_CHECK(i2cdev_init());
+  ESP_ERROR_CHECK(ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL));
+  uart_event_t event;
   while (true) {
-    i2cdev_init();
-    esp_err_t result = ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL);
-    if (result != ESP_OK) {
-      // print error
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_task_wdt_reset());
+    // Handle all events
+    while (xQueueReceive(uartQueue, reinterpret_cast<void*>(&event), 0)) {
+      switch (event.type) {
+        case (UART_PATTERN_DET): {
+          int pos = uart_pattern_pop_pos(UART_NUM);
+          int nextPos = uart_pattern_pop_pos(UART_NUM);
+          ESP_LOGI(CTRL_TAG, "Detected UART pattern. Position: %d, next position: %d", pos,
+                   nextPos);
+          break;
+        }
+        default: {
+          ESP_LOGE(CTRL_TAG, "Unknown event type");
+        }
+      }
     }
 
 #if APP_FORCE_TIME_RELOAD == 1
@@ -31,12 +50,10 @@ void Controller::taskLoop() {
 
     ds3231_get_time(&i2c, &currentTime);
     // TODO:
-    // 1. Read Clock time
-    // 2. Check whether a new day has started
-    // 3. If new day has started reset two
+    // 1. Check whether a new day has started
+    // 2. If new day has started reset state
     if (appState == AppStates::INIT) {
-      // TODO: Initialization or reboot, door state unknown. Get it from switch
-      // ...
+      updateDoorState();
       int result = performInitMode();
       if (result == 0) {
         // If everything is done
@@ -47,7 +64,7 @@ void Controller::taskLoop() {
     }
     // This would be the place to enter sleep mode to save power..
     // For now, delay for 20 seconds
-    vTaskDelay(20000);
+    vTaskDelay(1000);
   }
 }
 
@@ -182,6 +199,29 @@ int Controller::initOpen() {
     return 0;
   }
   return 1;
+}
+
+void Controller::updateDoorState() {
+  if (doorswitch::opened()) {
+    doorState = DoorStates::DOOR_OPEN;
+  } else {
+    doorState = DoorStates::DOOR_CLOSE;
+  }
+}
+
+void Controller::uartInit() {
+  uartCfg.baud_rate = 115200;
+  uartCfg.data_bits = UART_DATA_8_BITS;
+  uartCfg.parity = UART_PARITY_DISABLE;
+  uartCfg.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+  uartCfg.stop_bits = UART_STOP_BITS_1;
+  ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uartCfg));
+  ESP_ERROR_CHECK(uart_set_pin(UART_NUM, CONFIG_COM_UART_TX, CONFIG_COM_UART_RX, UART_PIN_NO_CHANGE,
+                               UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(uart_driver_install(UART_NUM, UART_RING_BUF_SIZE, UART_RING_BUF_SIZE,
+                                      UART_QUEUE_DEPTH, &uartQueue, 0));
+  ESP_ERROR_CHECK(uart_enable_pattern_det_baud_intr(UART_NUM, 'C', UART_PATTERN_NUM, 10, 10, 0));
+  ESP_ERROR_CHECK(uart_pattern_queue_reset(UART_NUM, UART_QUEUE_DEPTH));
 }
 
 int Controller::initClose() {
