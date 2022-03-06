@@ -37,7 +37,10 @@ START_STR = [
     "Hühnerklappen Client",
     "Chicken Coop Door Client"
 ]
-
+CONFIG_STR = [
+    "Detected following parameters from config.ini file:",
+    "Folgende Parameter wurden aus config.ini abgeleitet:"
+]
 REQUEST_STR = [
     "Please specify a command. 'x' to exit, 'h' to display commands: ",
     "Bitte Kommando eingeben. 'x' um zu beenden, 'h' für Hilfe: ",
@@ -71,9 +74,9 @@ MOTOR_NORMAL_STR = [
 def main():
     setup_cfg_from_ini()
     print(START_STR[CFG.language])
-    # print("Detected following parameters from config.ini file:")
-    # print(f"- Serial Port | com-port : {CFG.com_port}")
-    # print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
+    print(CONFIG_STR[CFG.language])
+    print(f"- Serial Port | com-port : {CFG.com_port}")
+    print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
     ser = serial.Serial(CFG.com_port, baudrate=115200)
     display_commands(CFG.language)
     while True:
@@ -121,6 +124,7 @@ def display_commands(language: Languages):
 def setup_cfg_from_ini():
     com_port = None
     com_port_hint = None
+    language_shortcode = None
     if os.path.exists(INI_FILE):
         config = configparser.ConfigParser()
         config.read(INI_FILE)
@@ -129,6 +133,8 @@ def setup_cfg_from_ini():
                 com_port = config["default"]["com-port"]
             if config.has_option("default", "port-hint"):
                 com_port_hint = config["default"]["port-hint"]
+            if config.has_option("default", "language"):
+                language_shortcode = config["default"]["language"]
     if com_port is None or com_port == "":
         if com_port_hint is not None and com_port_hint != "":
             com_port = find_com_port_from_hint(com_port_hint)
@@ -137,6 +143,10 @@ def setup_cfg_from_ini():
                 com_port = prompt_com_port()
         else:
             com_port = prompt_com_port()
+    CFG.language = Languages.ENGLISH
+    if language_shortcode is not None:
+        if language_shortcode == "de":
+            CFG.language = Languages.GERMAN
     CFG.com_port = com_port
 
 
