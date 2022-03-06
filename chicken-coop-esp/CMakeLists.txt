@@ -18,9 +18,16 @@ set(EXTRA_COMPONENT_DIRS
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+idf_build_get_property(IDF_VER IDF_VER)
+message(STATUS "Detected IDF version ${IDF_VER}. Recommended version v4.4")
+if(NOT IDF_VER MATCHES v4.4)
+    message(WARNING "Detected IDF version ${IDF_VER} does not match recommended version v4.4")
+endif()
+
+
 option(APP_FORCE_TIME_RELOAD "Force setting of compile time to the connected RTC" OFF)
 
-project(chicken-coop)
+project(chicken-coop-esp)
 
 idf_build_set_property(CXX_COMPILE_OPTIONS "-std=c++17" APPEND)
 

@@ -21,7 +21,7 @@ TaskHandle_t MOTOR_TASK_HANDLE = nullptr;
 TaskHandle_t LED_TASK_HANDLE = nullptr;
 
 extern "C" void app_main(void) {
-  ESP_LOGI("", "-- Chicken Coop Door Application v%d.%d.%d--", APP_VERSION_MAJOR, APP_VERSION_MINOR,
+  printf("-- Chicken Coop Door Application v%d.%d.%d --\n", APP_VERSION_MAJOR, APP_VERSION_MINOR,
            APP_VERSION_REVISION);
   ESP_LOGI(APP_TAG, "INx to GPIO port mapping: IN1 -> %d | IN2 -> %d | IN3 -> %d | IN4 -> %d",
            CONFIG_STEPPER_IN1_PORT, CONFIG_STEPPER_IN2_PORT, CONFIG_STEPPER_IN3_PORT,
