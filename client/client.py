@@ -33,6 +33,11 @@ CMD_TIME = "T"
 CMD_MODE_MANUAL = "M"
 CMD_MODE_NORMAL = "N"
 
+START_STR = [
+    "Hühnerklappen Client",
+    "Chicken Coop Door Client"
+]
+
 REQUEST_STR = [
     "Please specify a command. 'x' to exit, 'h' to display commands: ",
     "Bitte Kommando eingeben. 'x' um zu beenden, 'h' für Hilfe: ",
@@ -65,6 +70,10 @@ MOTOR_NORMAL_STR = [
 
 def main():
     setup_cfg_from_ini()
+    print(START_STR[CFG.language])
+    # print("Detected following parameters from config.ini file:")
+    # print(f"- Serial Port | com-port : {CFG.com_port}")
+    # print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
     ser = serial.Serial(CFG.com_port, baudrate=115200)
     display_commands(CFG.language)
     while True:
@@ -120,10 +129,6 @@ def setup_cfg_from_ini():
                 com_port = config["default"]["com-port"]
             if config.has_option("default", "port-hint"):
                 com_port_hint = config["default"]["port-hint"]
-
-        print("Detected following parameters from config.ini file:")
-        print(f"- Serial Port | com-port : {com_port}")
-        print(f"- Serial Port Hint | port-hint : {com_port_hint}")
     if com_port is None or com_port == "":
         if com_port_hint is not None and com_port_hint != "":
             com_port = find_com_port_from_hint(com_port_hint)

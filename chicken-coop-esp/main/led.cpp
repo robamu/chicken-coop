@@ -19,7 +19,6 @@ void ledTask(void *args) {
   configureLed();
 
   while (true) {
-    // ESP_LOGI(TAG, "Turning the LED %s!", s_led_state == true ? "ON" : "OFF");
     blinkLed();
     vTaskDelay(CONFIG_BLINK_PERIOD / portTICK_PERIOD_MS);
   }
@@ -31,11 +30,8 @@ void blinkLed(void) {
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
     led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(16, 16, 16));
     led_strip_flush(&LED_STRIP);
-    /* Refresh the strip to send data */
-    // led_strip->refresh(led_strip, 100);
   } else {
     /* Set all LED off to clear all pixels */
-    // led_strip->clear(led_strip, 50);
     led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(0, 0, 0));
     led_strip_flush(&LED_STRIP);
   }
@@ -52,10 +48,6 @@ void configureLed(void) {
   LED_STRIP.brightness = 255;
 
   ESP_ERROR_CHECK(led_strip_init(&LED_STRIP));
-  /* LED strip initialization with the GPIO and pixels number*/
-  // led_strip = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
-  /* Set all LED off to clear all pixels */
-  // led_strip->clear(led_strip, 50);
   led_strip_fill(&LED_STRIP, 0, 1, rgb_from_values(0, 0, 0));
   led_strip_flush(&LED_STRIP);
 }
