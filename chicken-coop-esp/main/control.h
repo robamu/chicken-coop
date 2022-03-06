@@ -14,11 +14,8 @@ void controlTask(void* args);
 class Controller {
  public:
   Controller();
-  /**
-   * Call before starting the controller task!
-   */
-  static void uartInit();
   static void taskEntryPoint(void* args);
+  static void init();
   void task();
 
   static int getDayMinutesFromHourAndMinute(int hour, int minute);
@@ -30,7 +27,8 @@ class Controller {
       static_cast<gpio_num_t>(CONFIG_DOOR_SWITCH_STATE_PORT);
 
   static constexpr char CTRL_TAG[] = "ctrl";
-  enum class AppStates { INIT, IDLE } appState = AppStates::IDLE;
+  static constexpr char PATTERN_CHAR = 'C';
+  enum class AppStates { INIT, IDLE, MANUAL } appState = AppStates::IDLE;
 
   enum class DoorStates {
     UNKNOWN,
@@ -42,6 +40,7 @@ class Controller {
 
   static constexpr uart_port_t UART_NUM = UART_NUM_1;
   static constexpr uint8_t UART_PATTERN_NUM = 2;
+  static constexpr uint8_t UART_PATTERN_TIMEOUT = 5;
   static QueueHandle_t UART_QUEUE;
   static uart_config_t UART_CFG;
   std::array<uint8_t, 524> UART_RECV_BUF = {};
@@ -63,12 +62,17 @@ class Controller {
   int currentCloseDayMinutes = 0;
 
   void handleUartReception();
+  void handleUartCommand(std::string cmd);
   // Returns 0 if initialization is done, otherwise 1
   int performInitMode();
   void updateDoorState();
   void performIdleMode();
   int initOpen();
   int initClose();
+  /**
+   * Call before starting the controller task!
+   */
+  static void uartInit();
 };
 
 #endif /* MAIN_CONTROL_H_ */

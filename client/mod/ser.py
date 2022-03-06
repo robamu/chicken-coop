@@ -1,9 +1,9 @@
-
+from typing import Optional
 import serial
 import serial.tools.list_ports
 
 
-def find_com_port_from_hint(hint: str) -> (bool, str):
+def find_com_port_from_hint(hint: str) -> Optional[str]:
     """Find a COM port based on a hint string"""
     if hint == "":
         print("Invalid hint, is empty..")
@@ -11,8 +11,8 @@ def find_com_port_from_hint(hint: str) -> (bool, str):
     ports = serial.tools.list_ports.comports()
     for port, desc, hwid in sorted(ports):
         if hint in desc:
-            return True, port
-    return False, ""
+            return port
+    return None
 
 
 def prompt_com_port() -> str:

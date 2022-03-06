@@ -1,19 +1,29 @@
 #include "control.h"
 
+#include <ds3231.h>
+#include <esp_log.h>
+#include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#include <string>
+
 #include "compile_time.h"
-#include "ds3231.h"
-#include "esp_log.h"
-#include "esp_task_wdt.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "open_close_times.h"
 #include "switch.h"
 #include "usr_config.h"
+
+static constexpr esp_log_level_t LOG_LEVEL = ESP_LOG_DEBUG;
 
 QueueHandle_t Controller::UART_QUEUE = nullptr;
 uart_config_t Controller::UART_CFG = {};
 
 Controller::Controller() {}
+
+void Controller::init() {
+  esp_log_level_set(CTRL_TAG, LOG_LEVEL);
+  uartInit();
+}
 
 void Controller::taskEntryPoint(void* args) {
   Controller ctrl;
@@ -22,18 +32,11 @@ void Controller::taskEntryPoint(void* args) {
 
 void Controller::task() {
   esp_task_wdt_add(nullptr);
-  esp_log_level_set(CTRL_TAG, ESP_LOG_DEBUG);
   ESP_ERROR_CHECK(i2cdev_init());
   ESP_ERROR_CHECK(ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL));
   while (true) {
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_task_wdt_reset());
     // Handle all events
-    size_t len = 0;
-    uart_get_buffered_data_len(UART_NUM, &len);
-    //(UART_NUM, UART_RECV_BUF, &len, 0);
-    if (len > 0) {
-      ESP_LOGI(CTRL_TAG, "Received %d bytes on UART", len);
-    }
     handleUartReception();
 #if APP_FORCE_TIME_RELOAD == 1
     // Set compile time
@@ -53,12 +56,10 @@ void Controller::task() {
         // If everything is done
         appState = AppStates::IDLE;
       }
-    } else {
+    } else if (appState == AppStates::IDLE) {
       performIdleMode();
     }
-    // This would be the place to enter sleep mode to save power..
-    // For now, delay for 20 seconds
-    vTaskDelay(1000);
+    vTaskDelay(400);
   }
 }
 
@@ -203,6 +204,36 @@ void Controller::updateDoorState() {
   }
 }
 
+void Controller::handleUartCommand(std::string cmd) {
+  const char* rawCmd = cmd.data();
+  if (cmd.length() == 2) {
+    ESP_LOGI(CTRL_TAG, "Ping detected");
+    // TODO: Send ping reply here
+    return;
+  }
+  char cmdByte = rawCmd[2];
+  switch (cmdByte) {
+    case ('C'): {
+      if (cmd.length() < 4) {
+        ESP_LOGW(CTRL_TAG, "Invalid mode command detected");
+        return;
+      }
+      char modeByte = rawCmd[3];
+      if (modeByte == 'M') {
+        // Switch to manual control
+        ESP_LOGI(CTRL_TAG, "Switching to manual mode");
+        appState = AppStates::MANUAL;
+      } else if (modeByte == 'N') {
+        ESP_LOGI(CTRL_TAG, "Switching to normal mode");
+        appState = AppStates::INIT;
+      } else {
+        ESP_LOGW(CTRL_TAG, "Invalid mode specifier %c detected, M (manual) and N (normal) allowed",
+                 modeByte);
+      }
+    }
+  }
+}
+
 void Controller::uartInit() {
   UART_CFG.baud_rate = 115200;
   UART_CFG.data_bits = UART_DATA_8_BITS;
@@ -214,23 +245,51 @@ void Controller::uartInit() {
   ESP_ERROR_CHECK(uart_param_config(UART_NUM, &UART_CFG));
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM, CONFIG_COM_UART_TX, CONFIG_COM_UART_RX, UART_PIN_NO_CHANGE,
                                UART_PIN_NO_CHANGE));
-  ESP_ERROR_CHECK(uart_enable_pattern_det_baud_intr(UART_NUM, 'C', UART_PATTERN_NUM, 10, 10, 0));
+  ESP_ERROR_CHECK(uart_enable_pattern_det_baud_intr(UART_NUM, PATTERN_CHAR, UART_PATTERN_NUM,
+                                                    UART_PATTERN_TIMEOUT, 0, 0));
   ESP_ERROR_CHECK(uart_pattern_queue_reset(UART_NUM, UART_QUEUE_DEPTH));
 }
 
 void Controller::handleUartReception() {
   uart_event_t event;
   while (xQueueReceive(UART_QUEUE, reinterpret_cast<void*>(&event), 0)) {
-    // ESP_LOGD(CTRL_TAG, "UART Event received");
     switch (event.type) {
+      case (UART_DATA): {
+        break;
+      }
       case (UART_PATTERN_DET): {
+        size_t len = 0;
+        uart_get_buffered_data_len(UART_NUM, &len);
         int pos = uart_pattern_pop_pos(UART_NUM);
-        int nextPos = uart_pattern_pop_pos(UART_NUM);
-        ESP_LOGI(CTRL_TAG, "Detected UART pattern. Position: %d, next position: %d", pos, nextPos);
+        int nextPos = uart_pattern_get_pos(UART_NUM);
+        ESP_LOGD(CTRL_TAG, "Detected UART pattern");
+        ESP_LOGD(CTRL_TAG, "Total buffered length %d, position: %d, next position: %d", len, pos,
+                 nextPos);
+        if (pos > 0) {
+          // Delete preceding data first
+          uart_read_bytes(UART_NUM, UART_RECV_BUF.data(), pos, 0);
+        }
+
+        size_t cmdLen = 0;
+        if (nextPos != -1 and nextPos > pos) {
+          // Next block of data detected. Only read the relevant block
+          cmdLen = nextPos - pos;
+        } else {
+          cmdLen = len - pos;
+        }
+        uart_read_bytes(UART_NUM, UART_RECV_BUF.data(), cmdLen, 0);
+        // Last character
+        if (UART_RECV_BUF[cmdLen - 1] != '\n') {
+          ESP_LOGW(CTRL_TAG, "Invalid UART command, did not end with newline character");
+          break;
+        }
+        UART_RECV_BUF[cmdLen - 1] = '\0';
+        ESP_LOGI(CTRL_TAG, "Received command %s", UART_RECV_BUF.data());
+        handleUartCommand(std::string(reinterpret_cast<const char*>(UART_RECV_BUF.data()), cmdLen));
         break;
       }
       default: {
-        ESP_LOGE(CTRL_TAG, "Unknown event type");
+        ESP_LOGW(CTRL_TAG, "Unknown event type");
       }
     }
   }
