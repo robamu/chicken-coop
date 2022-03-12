@@ -36,8 +36,9 @@ extern "C" void app_main(void) {
   esp_log_level_set("*", DEFAULT_LOG_LEVEL);
   doorswitch::init();
   CONTROLLER_OBJ.preTaskInit();
-  Controller::AppStates initState = Controller::AppStates::INIT;
+  Controller::AppStates initState = Controller::AppStates::START_DELAY;
   if (config::START_IN_MANUAL_MODE) {
+    ESP_LOGI(APP_TAG, "Starting in manual application mode");
     initState = Controller::AppStates::MANUAL;
   }
   CONTROLLER_OBJ.setAppState(initState);

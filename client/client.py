@@ -78,10 +78,7 @@ class PrintStrings:
         "Closing door in protected mode",
     ]
     INVALID_CMD_STR = ["Invalid command", "Ungültiges Kommando"]
-    MANUAL_TIME_CMD_STR = [
-        "Setting manual time",
-        "Setze manuelle Uhrzeit"
-    ]
+    MANUAL_TIME_CMD_STR = ["Setting manual time", "Setze manuelle Uhrzeit"]
 
 
 def get_door_open_close_str(close: bool, protected: bool):
@@ -113,13 +110,69 @@ class Cmds:
     MAN_CTRL_IDX = 2
     NORM_CTRL_IDX = 3
     SET_TIME_IDX = 4
-    OPEN_IDX = 5
-    CLOSE_IDX = 6
+    OPEN_PROT_IDX = 5
+    CLOSE_PROT_IDX = 6
+    OPEN_FORCE_IDX = 7
+    CLOSE_FORCE_IDX = 8
     SET_MANUAL_TIME = 31
     # Set a (wrong) time at which the door should be closed. Can be used for tests
     SET_NIGHT_TIME = 32
     # Set a (wrong) time at which the door should be opened. Can be used for tests
     SET_DAY_TIME = 33
+
+
+class CmdStrings:
+    COMMANDS_STR = [
+        "Commands:",
+        "Kommandos:"
+    ]
+    PING_STRING = [
+        "Send ping to ESP32-C3 controller",
+        "Sende Ping zum ESP32-C3 Controller"
+    ]
+    MAN_CTRL_STRING = [
+        "Switching to manual control mode",
+        "Wechsel in den manuellen Kontrollmodus"
+    ]
+    NORM_CTRL_STRING = [
+        "Switch to Normal Control Mode",
+        "Wechsel in den normalen Kontrollmodus"
+    ]
+    UPDATE_TIME_STRING = [
+        "Updates the time of the ESP32 controller",
+        "Aktualisiert Zeit aug dem ESP32 Controller"
+    ]
+    UPDATE_TIME_MAN_STRING = [
+        "Set time mnaually on the ESP32 controller",
+        "Setze Zeit manuell auf dem ESP32 Controller"
+    ]
+
+
+def print_motor_ctrl_cmd_string(cmd_idx: int, lang: Languages, close: bool, prot: bool):
+    if lang == Languages.ENGLISH:
+        if prot:
+            prot_str = "Protected"
+        else:
+            prot_str = "Unprotected"
+        if not close:
+            dir_str = "Open"
+        else:
+            dir_str = "Close"
+        print(f"{cmd_idx}: Motor Control {dir_str} in {prot_str} Mode. "
+              f"Only works in Manual Mode")
+    elif lang == Languages.GERMAN:
+        if prot:
+            prot_str = "geschützten"
+        else:
+            prot_str = "ungeschützten"
+        if not close:
+            dir_str = "auf"
+        else:
+            dir_str = "zu"
+        print(
+            f"{cmd_idx}: Klappe {dir_str} im {prot_str} Modus. "
+            f"Funktioniert nur im manuellen Kontrollmodus"
+        )
 
 
 def main():
@@ -158,69 +211,37 @@ def main():
             print_out = PrintStrings.TIME_PRINT[CFG.language] + ": " + date_time
             print(print_out)
             ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.OPEN_IDX)]:
-            print(get_door_open_close_str(close=False, protected=True))
-            while True:
-                revs = input("Specify number of revolutions [1-12]: ")
-                if not revs.isdigit():
-                    print("Input invalid")
-                    continue
-                revs = int(revs)
-                if revs < 1 or revs > 12:
-                    print("Number invalid")
-                    continue
-                break
-            cmd = (
-                CMD_PATTERN
-                + CMD_MOTOR_CTRL
-                + CMD_MOTOR_PROTECTED_MODE
-                + CMD_MOTOR_CTRL_OPEN
-                + CMD_TERMINATION
-            )
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.CLOSE_IDX)]:
-            print(get_door_open_close_str(close=True, protected=True))
-            cmd = (
-                CMD_PATTERN
-                + CMD_MOTOR_CTRL
-                + CMD_MOTOR_PROTECTED_MODE
-                + CMD_MOTOR_CTRL_CLOSE
-                + CMD_TERMINATION
-            )
+        elif request_cmd.lower() in [
+            str(Cmds.CLOSE_PROT_IDX),
+            str(Cmds.OPEN_PROT_IDX),
+            str(Cmds.CLOSE_FORCE_IDX),
+            str(Cmds.OPEN_FORCE_IDX)
+        ]:
+            prot = False
+            if request_cmd.lower() == Cmds.CLOSE_PROT_IDX:
+                prot = True
+                cmd_mode = CMD_MOTOR_PROTECTED_MODE
+            else:
+                cmd_mode = CMD_MOTOR_FORCE_MODE
+            if request_cmd.lower() in [
+                str(Cmds.CLOSE_PROT_IDX),
+                str(Cmds.CLOSE_FORCE_IDX),
+            ]:
+                dir_char = CMD_MOTOR_CTRL_CLOSE
+                close = True
+            else:
+                dir_char = CMD_MOTOR_CTRL_OPEN
+                close = False
+            print(get_door_open_close_str(close=close, protected=prot))
+            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + cmd_mode + dir_char + CMD_TERMINATION
             ser.write(cmd.encode("utf-8"))
         elif request_cmd.lower() in [str(Cmds.SET_MANUAL_TIME)]:
             print(PrintStrings.MANUAL_TIME_CMD_STR[CFG.language])
-            now = datetime.now()
-            year = input("Enter Year [nothing for current year]: ")
-            if year == "":
-                year = now.year
-            month = input("Enter Month [1-12 or nothing for current month]:")
-            if month == "":
-                month = now.month
-            day = input("Enter month day [0-31 or nothing for current day]: ")
-            if day == "":
-                day = now.day
-            hour = input("Enter hour of day [0-24 or nothing for current hour]: ")
-            if hour == "":
-                hour = now.hour
-            minute = input("Enter minute of the hour [0-60 or nothing for current minute]: ")
-            if minute == "":
-                minute = now.minute
-            second = input("Enter second of the minute [0-60 or nothing for current minute: ")
-            if second == "":
-                second = now.second
-            time = datetime(
-                year=year,
-                month=month,
-                day=day,
-                hour=hour,
-                minute=minute,
-                second=second
-            )
+            time = prompt_time_from_user()
             # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
             date_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
             cmd = CMD_PATTERN + CMD_TIME + date_time + CMD_TERMINATION
-            ser.write(cmd.encode('utf-8'))
+            ser.write(cmd.encode("utf-8"))
         else:
             print(PrintStrings.INVALID_CMD_STR[CFG.language])
 
@@ -229,26 +250,36 @@ def main():
 
 def display_commands(language: Languages):
     print("-" * 40)
-    if language == Languages.ENGLISH:
-        print("Commands:")
-        print(f"{Cmds.PING_INDEX}: Send ping to ESP32 controller")
-        print(f"{Cmds.MAN_CTRL_IDX}: Switch to Manual Control Mode")
-        print(f"{Cmds.NORM_CTRL_IDX}: Switch to Normal Control Mode")
-        print(f"{Cmds.SET_TIME_IDX}: Updates the Time of the ESP32 controller")
-        print(f"{Cmds.OPEN_IDX}: Motor Control Open. Only works in manual mode")
-        print(f"{Cmds.CLOSE_IDX}: Motor Control Close. Only works in normal mode")
-    elif language == Languages.GERMAN:
-        print("Kommandos:")
-        print(f"{Cmds.PING_INDEX}: Ping zum ESP32 Controller senden")
-        print(f"{Cmds.MAN_CTRL_IDX}: Wechsel in den manuellen Kontrollmodus")
-        print(f"{Cmds.NORM_CTRL_IDX}: Wechsel in den normalen Kontrollmodus")
-        print(f"{Cmds.SET_TIME_IDX}: Aktualisiert die Zeit des ESP32 Controller")
-        print(
-            f"{Cmds.OPEN_IDX}: Klappe auf. Funktioniert nur im manuellen Kontrollmodus"
-        )
-        print(
-            f"{Cmds.CLOSE_IDX}: Klappe zu. Funktioniert nur im manuellen Kontrollmodus"
-        )
+    print(CmdStrings.COMMANDS_STR[CFG.language])
+    print(f"{Cmds.PING_INDEX}: {CmdStrings.PING_STRING[CFG.language]}")
+    print(f"{Cmds.MAN_CTRL_IDX}: {CmdStrings.MAN_CTRL_STRING[CFG.language]}")
+    print(f"{Cmds.NORM_CTRL_IDX}: {CmdStrings.NORM_CTRL_STRING[CFG.language]}")
+    print(f"{Cmds.SET_TIME_IDX}: {CmdStrings.UPDATE_TIME_STRING[CFG.language]}")
+    print_motor_ctrl_cmd_string(
+        cmd_idx=Cmds.OPEN_PROT_IDX,
+        close=False,
+        lang=CFG.language,
+        prot=True
+    )
+    print_motor_ctrl_cmd_string(
+        cmd_idx=Cmds.CLOSE_PROT_IDX,
+        close=True,
+        lang=CFG.language,
+        prot=True
+    )
+    print_motor_ctrl_cmd_string(
+        cmd_idx=Cmds.OPEN_FORCE_IDX,
+        close=False,
+        lang=CFG.language,
+        prot=False
+    )
+    print_motor_ctrl_cmd_string(
+        cmd_idx=Cmds.CLOSE_FORCE_IDX,
+        close=True,
+        lang=CFG.language,
+        prot=False
+    )
+    print(f"{Cmds.SET_MANUAL_TIME}: {CmdStrings.UPDATE_TIME_MAN_STRING[CFG.language]}")
 
 
 def setup_cfg_from_ini():
@@ -278,6 +309,93 @@ def setup_cfg_from_ini():
         if language_shortcode == "de":
             CFG.language = Languages.GERMAN
     CFG.com_port = com_port
+
+
+def prompt_time_from_user() -> datetime:
+    now = datetime.now()
+    while True:
+        year = input("Enter Year [nothing for current year]: ")
+        if year == "":
+            year = now.year
+            break
+        if not year.isdigit():
+            print("Invalid year")
+            continue
+        year = int(year)
+        break
+    while True:
+        month = input("Enter Month [1-12 or nothing for current month]:")
+        if month == "":
+            month = now.month
+            break
+        if not month.isdigit():
+            print("Invalid month")
+            continue
+        month = int(month)
+        if month < 1 or month > 12:
+            print("Invalid month")
+            continue
+        break
+    while True:
+        day = input("Enter month day [1-31 or nothing for current day]: ")
+        if day == "":
+            day = now.day
+            break
+        if not day.isdigit():
+            print("Invalid day")
+            continue
+        day = int(day)
+        if day < 1 or day > 31:
+            print("Invalid day")
+            continue
+        break
+    while True:
+        hour = input("Enter hour of day [0-24 or nothing for current hour]: ")
+        if hour == "":
+            hour = now.hour
+            break
+        if not hour.isdigit():
+            print("Invalid hour")
+            continue
+        hour = int(hour)
+        if hour > 24 or hour < 0:
+            print("Invalid hour")
+            continue
+        break
+    while True:
+        minute = input(
+            "Enter minute of the hour [0-60 or nothing for current minute]: "
+        )
+        if minute == "":
+            minute = now.minute
+            break
+        if not minute.isdigit():
+            print("Invalid minute")
+            continue
+        minute = int(minute)
+        if minute > 60 or minute < 0:
+            print("Invalid minute")
+            continue
+        break
+    while True:
+        second = input(
+            "Enter second of the minute [0-60 or nothing for current minute]: "
+        )
+        if second == "":
+            second = now.second
+            break
+        if not second.isdigit():
+            print("Invalid seconds")
+            continue
+        second = int(second)
+        if second < 0 or second > 60:
+            print("Invalid seconds")
+            continue
+        break
+    time = datetime(
+        year=year, month=month, day=day, hour=hour, minute=minute, second=second
+    )
+    return time
 
 
 if __name__ == "__main__":
