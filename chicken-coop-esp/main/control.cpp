@@ -67,6 +67,11 @@ void Controller::stateMachine() {
       char timeBuf[64] = {};
       strftime(timeBuf, sizeof(timeBuf) - 1, "%Y-%m-%d %H:%M:%S", &currentTime);
       ESP_LOGI(CTRL_TAG, "Detected current time: %s", timeBuf);
+      if (doorswitch::opened()) {
+        ESP_LOGI(CTRL_TAG, "Door is opened");
+      } else {
+        ESP_LOGI(CTRL_TAG, "Door is closed");
+      }
       initPrintSwitch = false;
     }
     int result = performInitMode();
@@ -118,10 +123,10 @@ int Controller::performInitMode() {
       getDayMinutesFromHourAndMinute(OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][2],
                                      OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3]);
 
-  // There are three cases to consider here
-  // 1. Controller started before opening time
-  // 2. Controller started during open time
-  // 3. Controller started during close time
+  // There are three cases to consider here:
+  //  1. Controller started before opening time
+  //  2. Controller started during open time
+  //  3. Controller started during close time
   // In the first case, both open and close need to be executed for that day but the door has
   // to be closed.
   // In the second case, if the door is closed, it needs to be opened. Otherwise, only close

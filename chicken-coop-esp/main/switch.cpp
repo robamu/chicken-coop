@@ -22,9 +22,10 @@ int doorswitch::init() {
 
 bool switchState() {
 #if CONFIG_INVERT_DOOR_STATE_SWITCH == 1
-  return not gpio_get_level(SWITCH_GPIO);
-#else
   return gpio_get_level(SWITCH_GPIO);
+#else
+  // Level will be 0 if the door is opened.
+  return not gpio_get_level(SWITCH_GPIO);
 #endif
 }
 

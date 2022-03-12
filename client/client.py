@@ -1,6 +1,7 @@
 import os
 import serial
 import enum
+
 import configparser
 from mod.ser import prompt_com_port, find_com_port_from_hint
 from datetime import datetime
@@ -66,7 +67,7 @@ class PrintStrings:
         "Sende Kommando für manuelle Türkontrolle",
     ]
     MOTOR_NORMAL_STR = [
-        "Sending command to switch to nrormal motor control",
+        "Sending command to switch to normal motor control",
         "Sende Kommando für normale Türkontrolle",
     ]
     DOOR_OPEN_STR = [
@@ -77,6 +78,10 @@ class PrintStrings:
         "Closing door in protected mode",
     ]
     INVALID_CMD_STR = ["Invalid command", "Ungültiges Kommando"]
+    MANUAL_TIME_CMD_STR = [
+        "Setting manual time",
+        "Setze manuelle Uhrzeit"
+    ]
 
 
 def get_door_open_close_str(close: bool, protected: bool):
@@ -110,6 +115,11 @@ class Cmds:
     SET_TIME_IDX = 4
     OPEN_IDX = 5
     CLOSE_IDX = 6
+    SET_MANUAL_TIME = 31
+    # Set a (wrong) time at which the door should be closed. Can be used for tests
+    SET_NIGHT_TIME = 32
+    # Set a (wrong) time at which the door should be opened. Can be used for tests
+    SET_DAY_TIME = 33
 
 
 def main():
@@ -168,6 +178,39 @@ def main():
                 + CMD_TERMINATION
             )
             ser.write(cmd.encode("utf-8"))
+        elif request_cmd.lower() in [str(Cmds.SET_MANUAL_TIME)]:
+            print(PrintStrings.MANUAL_TIME_CMD_STR[CFG.language])
+            now = datetime.now()
+            year = input("Enter Year [nothing for current year]: ")
+            if year == "":
+                year = now.year
+            month = input("Enter Month [1-12 or nothing for current month]:")
+            if month == "":
+                month = now.month
+            day = input("Enter month day [0-31 or nothing for current day]: ")
+            if day == "":
+                day = now.day
+            hour = input("Enter hour of day [0-24 or nothing for current hour]: ")
+            if hour == "":
+                hour = now.hour
+            minute = input("Enter minute of the hour [0-60 or nothing for current minute]: ")
+            if minute == "":
+                minute = now.minute
+            second = input("Enter second of the minute [0-60 or nothing for current minute: ")
+            if second == "":
+                second = now.second
+            time = datetime(
+                year=year,
+                month=month,
+                day=day,
+                hour=hour,
+                minute=minute,
+                second=second
+            )
+            # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
+            date_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            cmd = CMD_PATTERN + CMD_TIME + date_time + CMD_TERMINATION
+            ser.write(cmd.encode('utf-8'))
         else:
             print(PrintStrings.INVALID_CMD_STR[CFG.language])
 

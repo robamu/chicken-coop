@@ -10,7 +10,7 @@ menu "Chicken Coop Configuration"
     config DEFAULT_FULL_OPEN_CLOSE_DURATION
         int "Open/Close duration [s]"
         range 50 1000
-        default 120
+        default 60
         help
             Full duration to open or close the door in seconds
 
