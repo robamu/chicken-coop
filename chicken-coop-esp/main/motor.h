@@ -1,12 +1,13 @@
 #ifndef MAIN_MOTOR_H_
 #define MAIN_MOTOR_H_
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
 #include <cstdint>
 
 #include "conf.h"
 #include "driver/gpio.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "sdkconfig.h"
 
 enum Direction : uint8_t { CLOCK_WISE = 0, COUNTER_CLOCK_WISE = 1 };
@@ -44,6 +45,7 @@ class Motor {
 
   const gpio_num_t MOTOR_PINS[4] = {STEPPER_IN1, STEPPER_IN3, STEPPER_IN2, STEPPER_IN4};
   uint8_t MOTOR_STEP_COUNTER = 0;
+  SemaphoreHandle_t motorLock = nullptr;
 
   Direction direction = Direction::CLOCK_WISE;
   TaskHandle_t taskHandle = nullptr;

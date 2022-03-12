@@ -81,16 +81,21 @@ void Controller::stateMachine() {
   }
   // In manual mode, monitor the manual motor control operations
   if (appState == AppStates::MANUAL) {
+    ESP_LOGV(CTRL_TAG, "Command state Manual Mode: %d", static_cast<uint8_t>(cmdState));
     switch (cmdState) {
       case (CmdStates::MOTOR_CTRL_CLOSE): {
+        ESP_LOGV(CTRL_TAG, "Checking motor close done");
         if (motor.operationDone()) {
           ESP_LOGI(CTRL_TAG, "Close operation in manual mode done");
+          cmdState = CmdStates::IDLE;
         }
         break;
       }
       case (CmdStates::MOTOR_CTRL_OPEN): {
+        ESP_LOGV(CTRL_TAG, "Checking motor open done");
         if (motor.operationDone()) {
           ESP_LOGI(CTRL_TAG, "Open operation in manual mode done");
+          cmdState = CmdStates::IDLE;
         }
         break;
       }
@@ -103,6 +108,7 @@ void Controller::stateMachine() {
 }
 
 int Controller::performInitMode() {
+  int result = 0;
   currentDay = currentTime.tm_mday;
   currentMonth = currentTime.tm_mon;
   currentOpenDayMinutes =
@@ -116,7 +122,8 @@ int Controller::performInitMode() {
   // 1. Controller started before opening time
   // 2. Controller started during open time
   // 3. Controller started during close time
-  // In the first case, both open and close need to be executed
+  // In the first case, both open and close need to be executed for that day but the door has
+  // to be closed.
   // In the second case, if the door is closed, it needs to be opened. Otherwise, only close
   // needs to be executed for that day
   // In the third case, the door is closed if it is open, otherwise nothing needs to be done
@@ -125,18 +132,30 @@ int Controller::performInitMode() {
   int dayMinutes = getDayMinutesFromHourAndMinute(hour, minute);
 
   if (dayMinutes < currentOpenDayMinutes - 10) {
-    // Case 1
-    // Both operations needs to be performed in the IDLE mode, INIT mode done
-    ESP_LOGI(CTRL_TAG, "Door needs to be both opened and closed. Going to IDLE mode");
-    openExecuted = false;
-    closeExecuted = false;
-    return 0;
+    // Case 1. Close the door if not already done
+    result = initClose();
+    if (result == 1) {
+      openExecuted = false;
+      closeExecuted = false;
+      // Both operations needs to be performed in the IDLE mode, INIT mode done
+      ESP_LOGI(CTRL_TAG, "Door needs to be both opened and closed for this day");
+    }
+    return result;
   } else if (dayMinutes >= currentOpenDayMinutes and dayMinutes < currentCloseDayMinutes - 10) {
     // Case 2
-    return initOpen();
+    result = initOpen();
+    if (result == 1) {
+      openExecuted = true;
+      closeExecuted = false;
+    }
+    return result;
   } else if (dayMinutes >= currentCloseDayMinutes) {
     // Case 3
-    return initClose();
+    result = initClose();
+    if (result == 1) {
+      openExecuted = true;
+      closeExecuted = true;
+    }
   }
   // For boundary cases, we are not done for now
   return 1;
@@ -188,7 +207,7 @@ void Controller::performIdleMode() {
     }
   }
 
-  if (not closeExecuted and dayMinutes >= closeExecuted) {
+  if (not closeExecuted and dayMinutes >= currentCloseDayMinutes) {
     if (doorState == DoorStates::DOOR_OPEN) {
       // Motor control might already be pending
       if (cmdState != CmdStates::MOTOR_CTRL_CLOSE) {
@@ -213,7 +232,6 @@ void Controller::performIdleMode() {
 
 int Controller::initOpen() {
   // This needs to be executed in any case
-  closeExecuted = false;
   if (doorState == DoorStates::DOOR_CLOSE) {
     if (cmdState == CmdStates::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be opened in INIT mode. Opening door");
@@ -223,27 +241,23 @@ int Controller::initOpen() {
       } else {
         ESP_LOGW(CTRL_TAG, "Tried to request door open in INIT mode, but motor is busy");
       }
-    } else {
+    }
+    if (cmdState == CmdStates::MOTOR_CTRL_OPEN) {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
         doorState = DoorStates::DOOR_OPEN;
-        closeExecuted = true;
+        cmdState = CmdStates::IDLE;
       }
     }
   }
   if (doorState == DoorStates::DOOR_OPEN) {
     // All ok
-    openExecuted = true;
     return 0;
   }
   return 1;
 }
 
 int Controller::initClose() {
-  // Open Operation not necessary anymore
-  openExecuted = true;
-  // Find out if door is closed or open. Close it if it is not
-  // ...
   if (doorState == DoorStates::DOOR_OPEN) {
     if (cmdState == CmdStates::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be closed in INIT mode. Closing door");
@@ -253,17 +267,17 @@ int Controller::initClose() {
       } else {
         ESP_LOGW(CTRL_TAG, "Tried to request door close in INIT mode, but motor is busy");
       }
-    } else {
+    }
+    if (cmdState == CmdStates::MOTOR_CTRL_CLOSE) {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
         doorState = DoorStates::DOOR_CLOSE;
-        closeExecuted = true;
+        cmdState = CmdStates::IDLE;
       }
     }
   }
   if (doorState == DoorStates::DOOR_CLOSE) {
     // All ok
-    closeExecuted = true;
     return 0;
   }
   return 1;
@@ -295,7 +309,12 @@ void Controller::handleUartCommand(std::string cmd) {
       if (modeByte == CMD_MODE_MANUAL) {
         // Switch to manual control
         ESP_LOGI(CTRL_TAG, "Switching to manual mode");
-        appState = AppStates::MANUAL;
+        if (cmdState != CmdStates::IDLE) {
+          ESP_LOGW(CTRL_TAG, "Can not switch to manual mode while door operation is pending");
+          return;
+        } else {
+          appState = AppStates::MANUAL;
+        }
       } else if (modeByte == CMD_MODE_NORMAL) {
         ESP_LOGI(CTRL_TAG, "Switching to normal mode");
         appState = AppStates::INIT;
@@ -356,7 +375,7 @@ void Controller::handleUartCommand(std::string cmd) {
         bool requestSuccess = motor.requestClose();
         if (requestSuccess) {
           ESP_LOGI(CTRL_TAG, "Requested to close door in manual mode");
-          cmdState = CmdStates::MOTOR_CTRL_OPEN;
+          cmdState = CmdStates::MOTOR_CTRL_CLOSE;
         } else {
           ESP_LOGW(CTRL_TAG, "Tried to request door close in MANUAL mode, but motor is busy");
         }

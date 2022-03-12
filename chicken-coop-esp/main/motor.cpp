@@ -5,7 +5,12 @@
 #include "sdkconfig.h"
 
 Motor::Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsOpenClose)
-    : fullOpenCloseDuration(fullOpenCloseDuration), revolutionsOpenClose(revolutionsOpenClose) {}
+    : fullOpenCloseDuration(fullOpenCloseDuration), revolutionsOpenClose(revolutionsOpenClose) {
+  motorLock = xSemaphoreCreateMutex();
+  if (motorLock != nullptr) {
+    xSemaphoreGive(motorLock);
+  }
+}
 
 void Motor::taskEntryPoint(void* args) {
   MotorArgs* motorArgs = reinterpret_cast<MotorArgs*>(args);
@@ -24,15 +29,17 @@ void Motor::taskOp() {
   }
   stepDelayMs = fullOpenCloseDuration * 1000 / 12 / 4096;
   ESP_LOGI(MOTOR_TAG, "Calculated delay between steps: %d milliseconds", stepDelayMs);
+  BaseType_t retval = 0;
   while (true) {
     // Wait for the control task to notify the motor task
-    BaseType_t retval = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    retval = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     if (retval == pdPASS) {
       // Handle motor driver code
       driveChickenCoop();
+      xSemaphoreTake(motorLock, portMAX_DELAY);
       driverState = DriverStates::IDLE;
-      // Go into blocked state again
-      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+      ESP_LOGD(MOTOR_TAG, "Motor operation done");
+      xSemaphoreGive(motorLock);
     }
   }
 }
@@ -103,41 +110,54 @@ void Motor::driveChickenCoop() {
 }
 
 bool Motor::requestOpen() {
-  if (driverState != DriverStates::IDLE) {
-    return false;
-  }
+  bool result = false;
+  xSemaphoreTake(motorLock, portMAX_DELAY);
+  if (driverState == DriverStates::IDLE) {
 #if CONFIG_CLOCKWISE_IS_OPEN == 1
-  direction = Direction::CLOCK_WISE;
+    direction = Direction::CLOCK_WISE;
 #else
-  direction = Direction::COUNTER_CLOCK_WISE;
+    direction = Direction::COUNTER_CLOCK_WISE;
 #endif
-  opPending = true;
-  driverState = DriverStates::OPENING;
-  // Unblocks motor task
-  xTaskNotifyGive(taskHandle);
-  return true;
+    opPending = true;
+    result = true;
+    driverState = DriverStates::OPENING;
+    // Unblocks motor task
+    xTaskNotifyGive(taskHandle);
+  }
+  xSemaphoreGive(motorLock);
+  return result;
 }
 
 bool Motor::requestClose() {
-  if (driverState != DriverStates::IDLE) {
-    return false;
-  }
+  bool result = false;
+  xSemaphoreTake(motorLock, portMAX_DELAY);
+  if (driverState == DriverStates::IDLE) {
 #if CONFIG_CLOCKWISE_IS_OPEN == 1
-  direction = Direction::COUNTER_CLOCK_WISE;
+    direction = Direction::COUNTER_CLOCK_WISE;
 #else
-  direction = Direction::CLOCK_WISE;
+    direction = Direction::CLOCK_WISE;
 #endif
-  opPending = true;
-  driverState = DriverStates::CLOSING;
-  // Unblocks motor task
-  xTaskNotifyGive(taskHandle);
-  return true;
+    opPending = true;
+    result = true;
+    driverState = DriverStates::CLOSING;
+    // Unblocks motor task
+    xTaskNotifyGive(taskHandle);
+  }
+  xSemaphoreGive(motorLock);
+  return result;
 }
 
 bool Motor::operationDone() {
-  if (opPending and driverState == DriverStates::IDLE) {
-    opPending = false;
-    return true;
+  bool result = false;
+  if (not opPending) {
+    result = true;
+  } else {
+    xSemaphoreTake(motorLock, portMAX_DELAY);
+    if (driverState == DriverStates::IDLE) {
+      opPending = false;
+      result = true;
+    }
+    xSemaphoreGive(motorLock);
   }
-  return false;
+  return result;
 }

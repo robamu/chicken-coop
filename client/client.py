@@ -42,13 +42,10 @@ CMD_MOTOR_CTRL_CLOSE = "C"
 
 
 class PrintStrings:
-    START_STR = [
-        "Hühnerklappen Client",
-        "Chicken Coop Door Client"
-    ]
+    START_STR = ["Hühnerklappen Client", "Chicken Coop Door Client"]
     CONFIG_STR = [
         "Detected following parameters from config.ini file:",
-        "Folgende Parameter wurden aus config.ini abgeleitet:"
+        "Folgende Parameter wurden aus config.ini abgeleitet:",
     ]
     REQUEST_STR = [
         "Please specify a command. 'x' to exit, 'h' to display commands: ",
@@ -59,13 +56,10 @@ class PrintStrings:
         "Closing Chicken Coop Door Client",
         "Schließe Hühnerklappen Client",
     ]
-    PING_PRINT = [
-        "Sending ping to controller",
-        "Sende Ping an den Controller"
-    ]
+    PING_PRINT = ["Sending ping to controller", "Sende Ping an den Controller"]
     TIME_PRINT = [
         "Setting current time in controller",
-        "Setze aktuelle Zeit im Controller"
+        "Setze aktuelle Zeit im Controller",
     ]
     MOTOR_MANUAL_STR = [
         "Sending command to switch to manual motor control",
@@ -77,16 +71,12 @@ class PrintStrings:
     ]
     DOOR_OPEN_STR = [
         "Opening door in protected mode",
-        "Öffne Klappe im geschützten Modus"
+        "Öffne Klappe im geschützten Modus",
     ]
     DOOR_CLOSE_STR = [
         "Closing door in protected mode",
-
     ]
-    INVALID_CMD_STR = [
-        "Invalid command",
-        "Ungültiges Kommando"
-    ]
+    INVALID_CMD_STR = ["Invalid command", "Ungültiges Kommando"]
 
 
 def get_door_open_close_str(close: bool, protected: bool):
@@ -159,14 +149,24 @@ def main():
             print(print_out)
             ser.write(cmd.encode("utf-8"))
         elif request_cmd.lower() in [str(Cmds.OPEN_IDX)]:
-            get_door_open_close_str(close=False, protected=True)
-            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + CMD_MOTOR_PROTECTED_MODE + CMD_MOTOR_CTRL_OPEN + \
-                  CMD_TERMINATION
+            print(get_door_open_close_str(close=False, protected=True))
+            cmd = (
+                CMD_PATTERN
+                + CMD_MOTOR_CTRL
+                + CMD_MOTOR_PROTECTED_MODE
+                + CMD_MOTOR_CTRL_OPEN
+                + CMD_TERMINATION
+            )
             ser.write(cmd.encode("utf-8"))
         elif request_cmd.lower() in [str(Cmds.CLOSE_IDX)]:
-            get_door_open_close_str(close=True, protected=True)
-            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + CMD_MOTOR_PROTECTED_MODE + CMD_MOTOR_CTRL_OPEN + \
-                  CMD_TERMINATION
+            print(get_door_open_close_str(close=True, protected=True))
+            cmd = (
+                CMD_PATTERN
+                + CMD_MOTOR_CTRL
+                + CMD_MOTOR_PROTECTED_MODE
+                + CMD_MOTOR_CTRL_OPEN
+                + CMD_TERMINATION
+            )
             ser.write(cmd.encode("utf-8"))
         else:
             print(PrintStrings.INVALID_CMD_STR[CFG.language])
@@ -190,8 +190,12 @@ def display_commands(language: Languages):
         print(f"{Cmds.MAN_CTRL_IDX}: Wechsel in den manuellen Kontrollmodus")
         print(f"{Cmds.NORM_CTRL_IDX}: Wechsel in den normalen Kontrollmodus")
         print(f"{Cmds.SET_TIME_IDX}: Aktualisiert die Zeit des ESP32 Controller")
-        print(f"{Cmds.OPEN_IDX}: Klappe auf. Funktioniert nur im manuellen Kontrollmodus")
-        print(f"{Cmds.CLOSE_IDX}: Klappe zu. Funktioniert nur im manuellen Kontrollmodus")
+        print(
+            f"{Cmds.OPEN_IDX}: Klappe auf. Funktioniert nur im manuellen Kontrollmodus"
+        )
+        print(
+            f"{Cmds.CLOSE_IDX}: Klappe zu. Funktioniert nur im manuellen Kontrollmodus"
+        )
 
 
 def setup_cfg_from_ini():
