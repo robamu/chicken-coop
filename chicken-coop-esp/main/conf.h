@@ -9,7 +9,11 @@ enum class Direction : uint8_t { CLOCK_WISE = 0, COUNTER_CLOCK_WISE = 1 };
 
 namespace config {
 
-static constexpr bool START_IN_MANUAL_MODE = CONFIG_START_IN_MANUAL_MODE;
+#ifdef CONFIG_START_IN_MANUAL_MODE
+static constexpr bool START_IN_MANUAL_MODE = true;
+#else
+static constexpr bool START_IN_MANUAL_MODE = false;
+#endif
 
 static constexpr uint32_t REVOLUTIONS_MAX = CONFIG_CHICKEN_COOP_REVOLUTIONS;
 // Duration in seconds. Maximum value: 1000

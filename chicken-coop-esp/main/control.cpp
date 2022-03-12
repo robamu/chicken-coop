@@ -198,6 +198,9 @@ void Controller::performIdleMode() {
     if (cmdState == CmdStates::MOTOR_CTRL_OPEN) {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door opening operation in IDLE mode done");
+        if (doorswitch::closed()) {
+          ESP_LOGW(CTRL_TAG, "Door should be opened but is closed according to switch");
+        }
         cmdState = CmdStates::IDLE;
         openExecuted = true;
       }
@@ -220,6 +223,9 @@ void Controller::performIdleMode() {
     if (cmdState == CmdStates::MOTOR_CTRL_CLOSE) {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door closing operation in IDLE mode done");
+        if (doorswitch::opened()) {
+          ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
+        }
         cmdState = CmdStates::IDLE;
         closeExecuted = true;
       }
@@ -268,6 +274,9 @@ int Controller::initClose() {
     if (cmdState == CmdStates::MOTOR_CTRL_CLOSE) {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
+        if (doorswitch::opened()) {
+          ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
+        }
         doorState = DoorStates::DOOR_CLOSE;
         cmdState = CmdStates::IDLE;
       }

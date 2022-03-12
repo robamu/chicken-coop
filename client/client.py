@@ -160,6 +160,16 @@ def main():
             ser.write(cmd.encode("utf-8"))
         elif request_cmd.lower() in [str(Cmds.OPEN_IDX)]:
             print(get_door_open_close_str(close=False, protected=True))
+            while True:
+                revs = input("Specify number of revolutions [1-12]: ")
+                if not revs.isdigit():
+                    print("Input invalid")
+                    continue
+                revs = int(revs)
+                if revs < 1 or revs > 12:
+                    print("Number invalid")
+                    continue
+                break
             cmd = (
                 CMD_PATTERN
                 + CMD_MOTOR_CTRL
