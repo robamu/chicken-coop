@@ -8,16 +8,22 @@
 
 #include "i2cdev.h"
 #include "motor.h"
-#include "sdkconfig.h"
 
 void controlTask(void* args);
 
 class Controller {
  public:
-  Controller(Motor& motor);
+  enum class AppStates { INIT, IDLE, MANUAL };
+
+  Controller(Motor& motor, AppStates initState = AppStates::IDLE);
+
+  void setAppState(AppStates appState);
   void preTaskInit();
 
   static void taskEntryPoint(void* args);
+
+  static bool motorStopCondition(Direction dir, uint8_t revIdx, void* args);
+  static Direction dirMapper(bool close);
 
   static int getDayMinutesFromHourAndMinute(int hour, int minute);
 
@@ -42,8 +48,6 @@ class Controller {
   static constexpr char CMD_MOTOR_CTRL_OPEN = 'O';
   static constexpr char CMD_MOTOR_CTRL_CLOSE = 'C';
 
-  enum class AppStates { INIT, IDLE, MANUAL } appState = AppStates::INIT;
-
   enum class DoorStates {
     UNKNOWN,
     DOOR_OPEN,
@@ -53,6 +57,7 @@ class Controller {
   enum class CmdStates { IDLE, MOTOR_CTRL_OPEN, MOTOR_CTRL_CLOSE } cmdState = CmdStates::IDLE;
 
   Motor& motor;
+  AppStates appState = AppStates::INIT;
   TaskHandle_t taskHandle = nullptr;
   static constexpr uart_port_t UART_NUM = UART_NUM_1;
   static constexpr uint8_t UART_PATTERN_NUM = 2;

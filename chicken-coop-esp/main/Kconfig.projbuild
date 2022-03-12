@@ -20,6 +20,12 @@ menu "Chicken Coop Configuration"
         help
             Maps the motor revolution direction to whether the door is opened or closed
 
+    config START_IN_MANUAL_MODE
+        bool "Start in manual mode. Useful for debugging"
+        default False
+        help
+            Start in manual mode. Useful for debugging
+
     config INVERT_DOOR_STATE_SWITCH
         bool "Invert the functions determining whether the door is opened or closed"
         default False

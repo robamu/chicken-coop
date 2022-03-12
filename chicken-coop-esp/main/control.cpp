@@ -15,12 +15,12 @@
 #include "switch.h"
 #include "usr_config.h"
 
-static constexpr esp_log_level_t LOG_LEVEL = ESP_LOG_DEBUG;
+static constexpr esp_log_level_t LOG_LEVEL = ESP_LOG_INFO;
 
 QueueHandle_t Controller::UART_QUEUE = nullptr;
 uart_config_t Controller::UART_CFG = {};
 
-Controller::Controller(Motor& motor) : motor(motor) {}
+Controller::Controller(Motor& motor, AppStates initState) : motor(motor), appState(initState) {}
 
 void Controller::preTaskInit() {
   esp_log_level_set(CTRL_TAG, LOG_LEVEL);
@@ -393,6 +393,44 @@ void Controller::updateCurrentOpenCloseTimes(bool printTimes) {
   currentOpenDayMinutes = getDayMinutesFromHourAndMinute(openHour, openMinute);
   currentCloseDayMinutes = getDayMinutesFromHourAndMinute(closeHour, closeMinute);
 }
+
+bool Controller::motorStopCondition(Direction dir, uint8_t revIdx, void* args) {
+  Direction openDir = dirMapper(false);
+  Direction closeDir = dirMapper(true);
+  if (dir == closeDir) {
+    // Upper limit for closing
+    if (revIdx == config::REVOLUTIONS_MAX) {
+      return true;
+    }
+    // Default condition for closing
+    return doorswitch::closed();
+  } else if (dir == openDir) {
+    if (revIdx == config::REVOLUTIONS_MAX) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Direction Controller::dirMapper(bool close) {
+  Direction dir = Direction::CLOCK_WISE;
+  if (close) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+    dir = Direction::CLOCK_WISE;
+#else
+    dir = Direction::COUNTER_CLOCK_WISE;
+#endif
+  } else {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+    dir = Direction::COUNTER_CLOCK_WISE;
+#else
+    dir = Direction::CLOCK_WISE;
+#endif
+  }
+  return dir;
+}
+
+void Controller::setAppState(AppStates appState) { this->appState = appState; }
 
 void Controller::uartInit() {
   UART_CFG.baud_rate = 115200;

@@ -5,8 +5,14 @@
 #include "rom/ets_sys.h"
 #include "sdkconfig.h"
 
-Motor::Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsOpenClose)
-    : fullOpenCloseDuration(fullOpenCloseDuration), revolutionsOpenClose(revolutionsOpenClose) {
+Motor::Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsMax,
+             config::StopConditionCb stopCb, config::StopConditionArgs stopArgs,
+             config::OpenCloseToDirCb dirMapper)
+    : stopCb(stopCb),
+      stopArgs(stopArgs),
+      dirMapper(dirMapper),
+      fullOpenCloseDuration(fullOpenCloseDuration),
+      revolutionsMax(revolutionsMax) {
   motorLock = xSemaphoreCreateMutex();
   if (motorLock != nullptr) {
     xSemaphoreGive(motorLock);
@@ -71,9 +77,9 @@ void Motor::configureDriverGpios() {
   gpio_set_level(STEPPER_IN4, false);
 }
 
-void Motor::printMotorDrive(bool direction) {
+void Motor::printMotorDrive(Direction direction) {
   const char* dirString = nullptr;
-  if (direction) {
+  if (direction == Direction::CLOCK_WISE) {
     dirString = "clockwise";
   } else {
     dirString = "counter-clockwise";
@@ -81,17 +87,15 @@ void Motor::printMotorDrive(bool direction) {
   ESP_LOGI(MOTOR_TAG, "Driving motor %s for one revolution(s)", dirString);
 }
 
-void Motor::driveMotor(bool print) {
+bool Motor::driveMotorOneRevolution(uint8_t revolutionIdx, bool print) {
   if (print) {
     printMotorDrive(direction);
   }
+  bool stopCondReached = false;
   for (uint32_t idx = 0; idx < STEP_COUNT; idx++) {
     uint8_t currentSeq = STEP_SEQUENCE[MOTOR_STEP_COUNTER];
-    // ESP_LOGI(TAG, "Current sequence for motor step %d: %d",
-    //    MOTOR_STEP_COUNTER, currentSeq);
     for (uint8_t motorIdx = 0; motorIdx < 4; motorIdx++) {
       bool setHigh = (currentSeq >> (3 - motorIdx)) & 0x01;
-      // ESP_LOGI(TAG, "Set high: %d", (int) setHigh);
       gpio_set_level(MOTOR_PINS[motorIdx], setHigh);
     }
     if (direction == Direction::CLOCK_WISE) {
@@ -101,9 +105,14 @@ void Motor::driveMotor(bool print) {
     }
     if (idx % 124 == 0) {
       esp_task_wdt_reset();
+      if (stopCb(direction, revolutionIdx, stopArgs)) {
+        stopCondReached = true;
+        break;
+      }
     }
     vTaskDelay(stepDelayMs / portTICK_PERIOD_MS);
   }
+  return stopCondReached;
 }
 
 void Motor::driveChickenCoop() {
@@ -113,9 +122,14 @@ void Motor::driveChickenCoop() {
   } else if (direction == Direction::COUNTER_CLOCK_WISE) {
     dirString = "counter-clockwise";
   }
-  ESP_LOGI(MOTOR_TAG, "Driving motor %s for %d revolution(s)", dirString, revolutionsOpenClose);
-  for (uint8_t idx = 0; idx < revolutionsOpenClose; idx++) {
-    driveMotor(false);
+  ESP_LOGI(MOTOR_TAG, "Driving motor %s for maximum of %d revolution(s)", dirString,
+           revolutionsMax);
+  for (uint8_t idx = 0; idx < revolutionsMax; idx++) {
+    bool stopCond = driveMotorOneRevolution(idx, false);
+    if (stopCond) {
+      ESP_LOGI(MOTOR_TAG, "Stop condition reached. Motor operation done");
+      break;
+    }
   }
 }
 
@@ -123,11 +137,7 @@ bool Motor::requestOpen() {
   bool result = false;
   xSemaphoreTake(motorLock, portMAX_DELAY);
   if (driverState == DriverStates::IDLE) {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-    direction = Direction::CLOCK_WISE;
-#else
-    direction = Direction::COUNTER_CLOCK_WISE;
-#endif
+    direction = dirMapper(false);
     opPending = true;
     result = true;
     driverState = DriverStates::OPENING;
@@ -142,11 +152,7 @@ bool Motor::requestClose() {
   bool result = false;
   xSemaphoreTake(motorLock, portMAX_DELAY);
   if (driverState == DriverStates::IDLE) {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-    direction = Direction::COUNTER_CLOCK_WISE;
-#else
-    direction = Direction::CLOCK_WISE;
-#endif
+    direction = dirMapper(true);
     opPending = true;
     result = true;
     driverState = DriverStates::CLOSING;
@@ -171,3 +177,10 @@ bool Motor::operationDone() {
   }
   return result;
 }
+
+void Motor::setStopConditionCb(config::StopConditionCb cb, config::StopConditionArgs stopArgs) {
+  this->stopCb = cb;
+  this->stopArgs = stopArgs;
+}
+
+void Motor::setDirectionMapper(config::OpenCloseToDirCb mapper) { this->dirMapper = mapper; }

@@ -8,9 +8,6 @@
 
 #include "conf.h"
 #include "driver/gpio.h"
-#include "sdkconfig.h"
-
-enum Direction : uint8_t { CLOCK_WISE = 0, COUNTER_CLOCK_WISE = 1 };
 
 class Motor {
  public:
@@ -19,7 +16,12 @@ class Motor {
 
   static constexpr uint32_t BIT_MASK_ALL = BIT_MASK_OPEN | BIT_MASK_CLOSE;
 
-  Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsOpenClose);
+  Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsOpenClose,
+        config::StopConditionCb stopCb, config::StopConditionArgs stopArgs,
+        config::OpenCloseToDirCb dirMapper);
+
+  void setStopConditionCb(config::StopConditionCb cb, config::StopConditionArgs stopArgs);
+  void setDirectionMapper(config::OpenCloseToDirCb mapper);
 
   static void taskEntryPoint(void* args);
 
@@ -46,20 +48,23 @@ class Motor {
   const gpio_num_t MOTOR_PINS[4] = {STEPPER_IN1, STEPPER_IN3, STEPPER_IN2, STEPPER_IN4};
   uint8_t MOTOR_STEP_COUNTER = 0;
   SemaphoreHandle_t motorLock = nullptr;
+  config::StopConditionCb stopCb = nullptr;
+  config::StopConditionArgs stopArgs = nullptr;
+  config::OpenCloseToDirCb dirMapper = nullptr;
 
   Direction direction = Direction::CLOCK_WISE;
   TaskHandle_t taskHandle = nullptr;
   uint32_t fullOpenCloseDuration = 0;
-  uint32_t revolutionsOpenClose = 0;
+  uint32_t revolutionsMax = 0;
   uint32_t defaultFullOpenCloseDuration = 0;
   uint32_t stepDelayMs = 0;
   bool opPending = false;
 
   void taskOp();
-  void driveMotor(bool print);
+  bool driveMotorOneRevolution(uint8_t revolutionIdx, bool print);
   void driveChickenCoop();
   void configureDriverGpios();
-  void printMotorDrive(bool direction);
+  void printMotorDrive(Direction direction);
 };
 
 struct MotorArgs {

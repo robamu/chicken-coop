@@ -174,7 +174,7 @@ def main():
                 CMD_PATTERN
                 + CMD_MOTOR_CTRL
                 + CMD_MOTOR_PROTECTED_MODE
-                + CMD_MOTOR_CTRL_OPEN
+                + CMD_MOTOR_CTRL_CLOSE
                 + CMD_TERMINATION
             )
             ser.write(cmd.encode("utf-8"))
