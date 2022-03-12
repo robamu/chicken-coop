@@ -2,6 +2,7 @@
 
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "rom/ets_sys.h"
 #include "sdkconfig.h"
 
 Motor::Motor(uint32_t fullOpenCloseDuration, uint32_t revolutionsOpenClose)
@@ -22,12 +23,21 @@ void Motor::taskEntryPoint(void* args) {
 
 void Motor::taskOp() {
   configureDriverGpios();
-  if (fullOpenCloseDuration < 50 or fullOpenCloseDuration > 1000) {
+  if (fullOpenCloseDuration > 1000) {
     ESP_LOGW(MOTOR_TAG, "Invalid open close duration of %d seconds", fullOpenCloseDuration);
-    ESP_LOGW(MOTOR_TAG, "Minimum is 50 seconds, maximum is 1000 seconds. Assuming 120 seconds");
-    fullOpenCloseDuration = 120;
+    ESP_LOGW(MOTOR_TAG, "Maximum is 1000 seconds. Assuming 60 seconds");
+    fullOpenCloseDuration = 60;
   }
-  stepDelayMs = fullOpenCloseDuration * 1000 / 12 / 4096;
+  uint32_t stepDelayUs = fullOpenCloseDuration * 1000 * 1000 / 12 / 4096;
+  if (stepDelayUs <= 1000) {
+    ESP_LOGI(MOTOR_TAG,
+             "Calculated delay between steps is less than 1 millisecond with %d microseconds",
+             stepDelayUs);
+    ESP_LOGI(MOTOR_TAG, "Rounding to 1 millisecond delay between steps");
+    stepDelayMs = 1;
+  } else {
+    stepDelayMs = stepDelayUs / 1000;
+  }
   ESP_LOGI(MOTOR_TAG, "Calculated delay between steps: %d milliseconds", stepDelayMs);
   BaseType_t retval = 0;
   while (true) {

@@ -87,6 +87,7 @@ class Controller {
   int performInitMode();
   void updateDoorState();
   void performIdleMode();
+  void updateCurrentOpenCloseTimes(bool printTimes);
   int initOpen();
   int initClose();
   /**

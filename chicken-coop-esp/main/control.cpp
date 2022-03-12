@@ -62,6 +62,8 @@ void Controller::stateMachine() {
   // INIT mode: System just came up and we need to check whether any operations are necessary
   // for the current time
   if (appState == AppStates::INIT) {
+    currentDay = currentTime.tm_mday;
+    currentMonth = currentTime.tm_mon;
     if (initPrintSwitch) {
       ESP_LOGI(CTRL_TAG, "Entered initialization mode");
       char timeBuf[64] = {};
@@ -72,7 +74,10 @@ void Controller::stateMachine() {
       } else {
         ESP_LOGI(CTRL_TAG, "Door is closed");
       }
+      updateCurrentOpenCloseTimes(true);
       initPrintSwitch = false;
+    } else {
+      updateCurrentOpenCloseTimes(false);
     }
     int result = performInitMode();
     if (result == 0) {
@@ -114,14 +119,6 @@ void Controller::stateMachine() {
 
 int Controller::performInitMode() {
   int result = 0;
-  currentDay = currentTime.tm_mday;
-  currentMonth = currentTime.tm_mon;
-  currentOpenDayMinutes =
-      getDayMinutesFromHourAndMinute(OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][0],
-                                     OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][1]);
-  currentCloseDayMinutes =
-      getDayMinutesFromHourAndMinute(OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][2],
-                                     OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3]);
 
   // There are three cases to consider here:
   //  1. Controller started before opening time
@@ -168,23 +165,18 @@ int Controller::performInitMode() {
 
 void Controller::performIdleMode() {
   int monthIdx = currentTime.tm_mon;
-  if (monthIdx > currentMonth) {
+  if (monthIdx != currentMonth) {
     currentMonth = monthIdx;
   }
 
   int day = currentTime.tm_mday;
   // new day has started. Each day, open and close need to be executed once for now
-  if (day > currentDay) {
+  if (day != currentDay) {
     currentDay = day;
     openExecuted = false;
     closeExecuted = false;
-    // Assign static variables
-    currentOpenDayMinutes =
-        getDayMinutesFromHourAndMinute(OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][0],
-                                       OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][1]);
-    currentCloseDayMinutes =
-        getDayMinutesFromHourAndMinute(OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][2],
-                                       OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3]);
+    ESP_LOGI(CTRL_TAG, "New day has started. Assigning new opening and closing times");
+    updateCurrentOpenCloseTimes(true);
   }
 
   int hour = currentTime.tm_hour;
@@ -387,6 +379,19 @@ void Controller::handleUartCommand(std::string cmd) {
       }
     }
   }
+}
+
+void Controller::updateCurrentOpenCloseTimes(bool printTimes) {
+  uint32_t openHour = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][0];
+  uint32_t openMinute = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][1];
+  uint32_t closeHour = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][2];
+  uint32_t closeMinute = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3];
+  if (printTimes) {
+    ESP_LOGI(CTRL_TAG, "Opening time for today: %02d:%02d | Closing time for today: %02d:%02d",
+             openHour, openMinute, closeHour, closeMinute);
+  }
+  currentOpenDayMinutes = getDayMinutesFromHourAndMinute(openHour, openMinute);
+  currentCloseDayMinutes = getDayMinutesFromHourAndMinute(closeHour, closeMinute);
 }
 
 void Controller::uartInit() {
