@@ -3,6 +3,7 @@ import serial
 import enum
 import configparser
 from mod.ser import prompt_com_port, find_com_port_from_hint
+from datetime import datetime
 
 
 class Languages(enum.IntEnum):
@@ -33,92 +34,164 @@ CMD_TIME = "T"
 CMD_MODE_MANUAL = "M"
 CMD_MODE_NORMAL = "N"
 
-START_STR = [
-    "Hühnerklappen Client",
-    "Chicken Coop Door Client"
-]
-CONFIG_STR = [
-    "Detected following parameters from config.ini file:",
-    "Folgende Parameter wurden aus config.ini abgeleitet:"
-]
-REQUEST_STR = [
-    "Please specify a command. 'x' to exit, 'h' to display commands: ",
-    "Bitte Kommando eingeben. 'x' um zu beenden, 'h' für Hilfe: ",
-]
+CMD_MOTOR_PROTECTED_MODE = "P"
+CMD_MOTOR_FORCE_MODE = "F"
 
-TERMINATION_PRINT = [
-    "Closing Chicken Coop Door Client",
-    "Schließe Hühnerklappen Client",
-]
-PING_PRINT = [
-    "Sending ping to controller",
-    "Sende Ping an den Controller"
-]
+CMD_MOTOR_CTRL_OPEN = "O"
+CMD_MOTOR_CTRL_CLOSE = "C"
 
-PING_INDEX = 1
-MAN_CTRL_IDX = 2
-NORM_CTRL_IDX = 3
-SET_TIME_IDX = 4
-OPEN_IDX = 5
-CLOSE_IDX = 6
 
-MOTOR_MANUAL_STR = [
-    "Sending command to switch to manual motor control",
-    "Sende Kommando für manuelle Türkontrolle",
-]
-MOTOR_NORMAL_STR = [
-    "Sending command to switch to nrormal motor control",
-    "Sende Kommando für normale Türkontrolle",
-]
+class PrintStrings:
+    START_STR = [
+        "Hühnerklappen Client",
+        "Chicken Coop Door Client"
+    ]
+    CONFIG_STR = [
+        "Detected following parameters from config.ini file:",
+        "Folgende Parameter wurden aus config.ini abgeleitet:"
+    ]
+    REQUEST_STR = [
+        "Please specify a command. 'x' to exit, 'h' to display commands: ",
+        "Bitte Kommando eingeben. 'x' um zu beenden, 'h' für Hilfe: ",
+    ]
+
+    TERMINATION_PRINT = [
+        "Closing Chicken Coop Door Client",
+        "Schließe Hühnerklappen Client",
+    ]
+    PING_PRINT = [
+        "Sending ping to controller",
+        "Sende Ping an den Controller"
+    ]
+    TIME_PRINT = [
+        "Setting current time in controller",
+        "Setze aktuelle Zeit im Controller"
+    ]
+    MOTOR_MANUAL_STR = [
+        "Sending command to switch to manual motor control",
+        "Sende Kommando für manuelle Türkontrolle",
+    ]
+    MOTOR_NORMAL_STR = [
+        "Sending command to switch to nrormal motor control",
+        "Sende Kommando für normale Türkontrolle",
+    ]
+    DOOR_OPEN_STR = [
+        "Opening door in protected mode",
+        "Öffne Klappe im geschützten Modus"
+    ]
+    DOOR_CLOSE_STR = [
+        "Closing door in protected mode",
+
+    ]
+    INVALID_CMD_STR = [
+        "Invalid command",
+        "Ungültiges Kommando"
+    ]
+
+
+def get_door_open_close_str(close: bool, protected: bool):
+    if CFG.language == Languages.GERMAN:
+        if protected:
+            protect_str = "geschützten"
+        else:
+            protect_str = "ungeschützten"
+        if close:
+            dir_str = "Schließe"
+        else:
+            dir_str = "Öffne"
+        return f"{dir_str} Klappe im {protect_str} Modus"
+    elif CFG.language == Languages.ENGLISH:
+        if protected:
+            protect_str = "protected"
+        else:
+            protect_str = "unprotected"
+        if close:
+            dir_str = "Closing"
+        else:
+            dir_str = "Opening"
+        return f"{dir_str} door in {protect_str} mode"
+    return ""
+
+
+class Cmds:
+    PING_INDEX = 1
+    MAN_CTRL_IDX = 2
+    NORM_CTRL_IDX = 3
+    SET_TIME_IDX = 4
+    OPEN_IDX = 5
+    CLOSE_IDX = 6
+
 
 def main():
     setup_cfg_from_ini()
-    print(START_STR[CFG.language])
-    print(CONFIG_STR[CFG.language])
+    print(PrintStrings.START_STR[CFG.language])
+    print(PrintStrings.CONFIG_STR[CFG.language])
     print(f"- Serial Port | com-port : {CFG.com_port}")
     print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
     ser = serial.Serial(CFG.com_port, baudrate=115200)
     display_commands(CFG.language)
     while True:
-        request_cmd = input(REQUEST_STR[CFG.language])
+        request_cmd = input(PrintStrings.REQUEST_STR[CFG.language])
         if request_cmd.lower() in ["x"]:
             break
         if request_cmd.lower() in ["h"]:
             display_commands(CFG.language)
             continue
-        if request_cmd.lower() in [str(MAN_CTRL_IDX)]:
-            print(MOTOR_MANUAL_STR[CFG.language])
+        if request_cmd.lower() in [str(Cmds.MAN_CTRL_IDX)]:
+            print(PrintStrings.MOTOR_MANUAL_STR[CFG.language])
             cmd = CMD_PATTERN + CMD_MODE + CMD_MODE_MANUAL + CMD_TERMINATION
             ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(PING_INDEX)]:
-            print(PING_PRINT[CFG.language])
+        elif request_cmd.lower() in [str(Cmds.PING_INDEX)]:
+            print(PrintStrings.PING_PRINT[CFG.language])
             cmd = CMD_PATTERN + CMD_TERMINATION
             ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(NORM_CTRL_IDX)]:
-            print(MOTOR_NORMAL_STR[CFG.language])
+        elif request_cmd.lower() in [str(Cmds.NORM_CTRL_IDX)]:
+            print(PrintStrings.MOTOR_NORMAL_STR[CFG.language])
             cmd = CMD_PATTERN + CMD_MODE + CMD_MODE_NORMAL + CMD_TERMINATION
             ser.write(cmd.encode("utf-8"))
-    print(TERMINATION_PRINT[CFG.language])
+        elif request_cmd.lower() in [str(Cmds.SET_TIME_IDX)]:
+            cmd = CMD_PATTERN + CMD_TIME
+            now = datetime.now()
+            # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
+            date_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            cmd += date_time + CMD_TERMINATION
+            print_out = PrintStrings.TIME_PRINT[CFG.language] + ": " + date_time
+            print(print_out)
+            ser.write(cmd.encode("utf-8"))
+        elif request_cmd.lower() in [str(Cmds.OPEN_IDX)]:
+            get_door_open_close_str(close=False, protected=True)
+            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + CMD_MOTOR_PROTECTED_MODE + CMD_MOTOR_CTRL_OPEN + \
+                  CMD_TERMINATION
+            ser.write(cmd.encode("utf-8"))
+        elif request_cmd.lower() in [str(Cmds.CLOSE_IDX)]:
+            get_door_open_close_str(close=True, protected=True)
+            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + CMD_MOTOR_PROTECTED_MODE + CMD_MOTOR_CTRL_OPEN + \
+                  CMD_TERMINATION
+            ser.write(cmd.encode("utf-8"))
+        else:
+            print(PrintStrings.INVALID_CMD_STR[CFG.language])
+
+    print(PrintStrings.TERMINATION_PRINT[CFG.language])
 
 
 def display_commands(language: Languages):
     print("-" * 40)
     if language == Languages.ENGLISH:
         print("Commands:")
-        print(f"{PING_INDEX}: Send ping to ESP32 controller")
-        print(f"{MAN_CTRL_IDX}: Switch to Manual Control Mode")
-        print(f"{NORM_CTRL_IDX}: Switch to Normal Control Mode")
-        print(f"{SET_TIME_IDX}: Updates the Time of the ESP32 controller")
-        print(f"{OPEN_IDX}: Motor Control Open. Only works in manual mode")
-        print(f"{CLOSE_IDX}: Motor Control Close. Only works in normal mode")
+        print(f"{Cmds.PING_INDEX}: Send ping to ESP32 controller")
+        print(f"{Cmds.MAN_CTRL_IDX}: Switch to Manual Control Mode")
+        print(f"{Cmds.NORM_CTRL_IDX}: Switch to Normal Control Mode")
+        print(f"{Cmds.SET_TIME_IDX}: Updates the Time of the ESP32 controller")
+        print(f"{Cmds.OPEN_IDX}: Motor Control Open. Only works in manual mode")
+        print(f"{Cmds.CLOSE_IDX}: Motor Control Close. Only works in normal mode")
     elif language == Languages.GERMAN:
         print("Kommandos:")
-        print(f"{PING_INDEX}: Ping zum ESP32 Controller senden")
-        print(f"{MAN_CTRL_IDX}: Wechsel in den manuellen Kontrollmodus")
-        print(f"{NORM_CTRL_IDX}: Wechsel in den normalen Kontrollmodus")
-        print(f"{SET_TIME_IDX}: Aktualisiert die Zeit des ESP32 Controller")
-        print(f"{OPEN_IDX}: Klappe auf. Funktioniert nur im manuellen Kontrollmodus")
-        print(f"{CLOSE_IDX}: Klappe zu. Funktioniert nur im manuellen Kontrollmodus")
+        print(f"{Cmds.PING_INDEX}: Ping zum ESP32 Controller senden")
+        print(f"{Cmds.MAN_CTRL_IDX}: Wechsel in den manuellen Kontrollmodus")
+        print(f"{Cmds.NORM_CTRL_IDX}: Wechsel in den normalen Kontrollmodus")
+        print(f"{Cmds.SET_TIME_IDX}: Aktualisiert die Zeit des ESP32 Controller")
+        print(f"{Cmds.OPEN_IDX}: Klappe auf. Funktioniert nur im manuellen Kontrollmodus")
+        print(f"{Cmds.CLOSE_IDX}: Klappe zu. Funktioniert nur im manuellen Kontrollmodus")
 
 
 def setup_cfg_from_ini():
