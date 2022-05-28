@@ -186,7 +186,7 @@ void Controller::performIdleMode() {
     currentMonth = monthIdx;
   }
 
-  int day = currentTime.tm_mday;
+  int day = currentTime.tm_mday - 1;
   // new day has started. Each day, open and close need to be executed once for now
   if (day != currentDay) {
     currentDay = day;
@@ -317,8 +317,18 @@ void Controller::updateDoorState() {
 void Controller::handleUartCommand(std::string cmd) {
   const char* rawCmd = cmd.data();
   if (cmd.length() == 3) {
+    size_t currentIdx = 0;
     ESP_LOGI(CTRL_TAG, "Ping detected");
-    // TODO: Send ping reply here
+    UART_REPLY_BUF[currentIdx] = PATTERN_CHAR;
+    currentIdx++;
+    UART_REPLY_BUF[currentIdx] = PATTERN_CHAR;
+    currentIdx++;
+    UART_REPLY_BUF[currentIdx] = '\n';
+    currentIdx++;
+    int result = uart_write_bytes(UART_NUM, UART_REPLY_BUF.data(), currentIdx);
+    if (result < 0) {
+      ESP_LOGI(CTRL_TAG, "UART write failed with code: %d", result);
+    }
     return;
   }
   char cmdByte = rawCmd[2];

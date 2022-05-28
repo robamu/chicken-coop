@@ -42,9 +42,11 @@ def reply_handler(ser: serial.Serial):
         if reply[0] != ord("C") or reply[1] != ord("C"):
             print('Invalid reply format, must start with "CC"')
             continue
-        if len(reply) < 4:
+        if len(reply) == 2:
+            print("Received ping reply")
+        elif len(reply) < 4:
             print("Invalid reply length detected")
-
+            continue
         if reply[2] == ord(CommandChars.REQUEST):
             if reply[3] == ord(RequestChars.TIME):
                 time_str = reply[4:].rstrip("\n".encode()).decode()
