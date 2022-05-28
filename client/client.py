@@ -1,4 +1,7 @@
 import os
+import threading
+from typing import List
+
 import serial
 import enum
 
@@ -15,6 +18,42 @@ class Languages(enum.IntEnum):
 INI_FILE = "config.ini"
 
 
+def main():
+    setup_cfg_from_ini()
+    print(PrintStrings.START[CFG.language])
+    print(PrintStrings.CONFIG[CFG.language])
+    print(f"- Serial Port | com-port : {CFG.com_port}")
+    print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
+    ser = serial.Serial(CFG.com_port, baudrate=115200)
+    reply_thread = threading.Thread(target=reply_handler, args=(ser,), daemon=True)
+    reply_thread.start()
+    display_commands()
+    while True:
+        char = req_handle_cmd(ser)
+        if char == "x":
+            break
+    print(PrintStrings.TERMINATION_PRINT[CFG.language])
+
+
+def reply_handler(ser: serial.Serial):
+    while True:
+        reply = ser.readline()
+        print()
+        if reply[0] != ord("C") or reply[1] != ord("C"):
+            print('Invalid reply format, must start with "CC"')
+            continue
+        if len(reply) < 4:
+            print("Invalid reply length detected")
+
+        if reply[2] == ord(CommandChars.REQUEST):
+            if reply[3] == ord(RequestChars.TIME):
+                time_str = reply[4:].rstrip("\n".encode()).decode()
+                print(f"Received current time on the ESP32: {time_str}")
+        else:
+            print(f"Received {reply} with no implemented reply handling")
+        print(PrintStrings.REQUEST_STR[CFG.language], end="")
+
+
 class Config:
     com_port = ""
     com_port_hint = ""
@@ -27,10 +66,18 @@ CFG = Config()
 CMD_PATTERN = "CC"
 CMD_TERMINATION = "\n"
 
-CMD_MODE = "C"
-CMD_MOTOR_CTRL = "M"
-CMD_DATA = "D"
-CMD_TIME = "T"
+
+class CommandChars:
+    MODE = "C"
+    MOTOR_CTRL = "M"
+    DATA = "D"
+    TIME = "T"
+    REQUEST = "R"
+
+
+class RequestChars:
+    TIME = "T"
+
 
 CMD_MODE_MANUAL = "M"
 CMD_MODE_NORMAL = "N"
@@ -43,8 +90,8 @@ CMD_MOTOR_CTRL_CLOSE = "C"
 
 
 class PrintStrings:
-    START_STR = ["Hühnerklappen Client", "Chicken Coop Door Client"]
-    CONFIG_STR = [
+    START = ["Hühnerklappen Client", "Chicken Coop Door Client"]
+    CONFIG = [
         "Detected following parameters from config.ini file:",
         "Folgende Parameter wurden aus config.ini abgeleitet:",
     ]
@@ -57,12 +104,12 @@ class PrintStrings:
         "Closing Chicken Coop Door Client",
         "Schließe Hühnerklappen Client",
     ]
-    PING_PRINT = ["Sending ping to controller", "Sende Ping an den Controller"]
-    TIME_PRINT = [
+    PING = ["Sending ping to controller", "Sende Ping an den Controller"]
+    SET_TIME = [
         "Setting current time in controller",
         "Setze aktuelle Zeit im Controller",
     ]
-    MOTOR_MANUAL_STR = [
+    MOTOR_MAN_CTRL = [
         "Sending command to switch to manual motor control",
         "Sende Kommando für manuelle Türkontrolle",
     ]
@@ -105,7 +152,7 @@ def get_door_open_close_str(close: bool, protected: bool):
     return ""
 
 
-class Cmds:
+class Cmds(enum.IntEnum):
     PING_INDEX = 1
     MAN_CTRL_IDX = 2
     NORM_CTRL_IDX = 3
@@ -114,6 +161,7 @@ class Cmds:
     CLOSE_PROT_IDX = 6
     OPEN_FORCE_IDX = 7
     CLOSE_FORCE_IDX = 8
+    REQUEST_TIME = 12
     SET_MANUAL_TIME = 31
     # Set a (wrong) time at which the door should be closed. Can be used for tests
     SET_NIGHT_TIME = 32
@@ -121,165 +169,171 @@ class Cmds:
     SET_DAY_TIME = 33
 
 
+COMMANDS_STR = ["Commands:", "Kommandos:"]
+
+
 class CmdStrings:
-    COMMANDS_STR = [
-        "Commands:",
-        "Kommandos:"
-    ]
-    PING_STRING = [
-        "Send ping to ESP32-C3 controller",
-        "Sende Ping zum ESP32-C3 Controller"
-    ]
-    MAN_CTRL_STRING = [
+    PING = ["Send ping to ESP32-C3 controller", "Sende Ping zum ESP32-C3 Controller"]
+    MAN_CTRL = [
         "Switching to manual control mode",
-        "Wechsel in den manuellen Kontrollmodus"
+        "Wechsel in den manuellen Kontrollmodus",
     ]
-    NORM_CTRL_STRING = [
+    NORM_CTRL = [
         "Switch to Normal Control Mode",
-        "Wechsel in den normalen Kontrollmodus"
+        "Wechsel in den normalen Kontrollmodus",
     ]
-    UPDATE_TIME_STRING = [
+    SET_TIME = [
         "Updates the time of the ESP32 controller",
-        "Aktualisiert Zeit aug dem ESP32 Controller"
+        "Aktualisiert Zeit auf dem ESP32 Controller",
     ]
-    UPDATE_TIME_MAN_STRING = [
-        "Set time mnaually on the ESP32 controller",
-        "Setze Zeit manuell auf dem ESP32 Controller"
+    PRINT_TIME_STR = [
+        "Print current RTC time",
+        "Zeige aktuelle RTC Zeit auf der Konsole an",
+    ]
+    UPDATE_TIME_MAN = [
+        "Set time manually on the ESP32 controller",
+        "Setze Zeit manuell auf dem ESP32 Controller",
     ]
 
 
-def print_motor_ctrl_cmd_string(cmd_idx: int, lang: Languages, close: bool, prot: bool):
-    if lang == Languages.ENGLISH:
-        if prot:
-            prot_str = "Protected"
-        else:
-            prot_str = "Unprotected"
-        if not close:
-            dir_str = "Open"
-        else:
-            dir_str = "Close"
-        print(f"{cmd_idx}: Motor Control {dir_str} in {prot_str} Mode. "
-              f"Only works in Manual Mode")
-    elif lang == Languages.GERMAN:
-        if prot:
-            prot_str = "geschützten"
-        else:
-            prot_str = "ungeschützten"
-        if not close:
-            dir_str = "auf"
-        else:
-            dir_str = "zu"
-        print(
-            f"{cmd_idx}: Klappe {dir_str} im {prot_str} Modus. "
-            f"Funktioniert nur im manuellen Kontrollmodus"
+def build_motor_ctrl_cmd_strings(close: bool, prot: bool) -> List[str]:
+    strings = []
+    if prot:
+        prot_str = "Protected"
+    else:
+        prot_str = "Unprotected"
+    if not close:
+        dir_str = "Open"
+    else:
+        dir_str = "Close"
+    strings.append(
+        f"Motor Control {dir_str} in {prot_str} Mode. " f"Only works in Manual Mode"
+    )
+    if prot:
+        prot_str = "geschützten"
+    else:
+        prot_str = "ungeschützten"
+    if not close:
+        dir_str = "auf"
+    else:
+        dir_str = "zu"
+    strings.append(
+        f"Klappe {dir_str} im {prot_str} Modus. "
+        f"Funktioniert nur im manuellen Kontrollmodus"
+    )
+    return strings
+
+
+CMD_INFO = {
+    Cmds.PING_INDEX: [CmdStrings.PING, PrintStrings.PING],
+    Cmds.MAN_CTRL_IDX: [CmdStrings.MAN_CTRL, PrintStrings.MOTOR_MAN_CTRL],
+    Cmds.NORM_CTRL_IDX: [CmdStrings.NORM_CTRL, PrintStrings.MOTOR_NORMAL_STR],
+    Cmds.SET_TIME_IDX: [CmdStrings.SET_TIME, PrintStrings.SET_TIME],
+    Cmds.REQUEST_TIME: [CmdStrings.PRINT_TIME_STR, "HELLO"],
+    Cmds.OPEN_PROT_IDX: [
+        build_motor_ctrl_cmd_strings(False, True),
+        PrintStrings.DOOR_OPEN_STR,
+    ],
+    Cmds.CLOSE_PROT_IDX: [
+        build_motor_ctrl_cmd_strings(True, True),
+        PrintStrings.DOOR_CLOSE_STR,
+    ],
+    Cmds.OPEN_FORCE_IDX: [
+        build_motor_ctrl_cmd_strings(False, False),
+        PrintStrings.DOOR_OPEN_STR,
+    ],
+    Cmds.CLOSE_FORCE_IDX: [
+        build_motor_ctrl_cmd_strings(True, False),
+        PrintStrings.DOOR_CLOSE_STR,
+    ],
+    Cmds.SET_MANUAL_TIME: [CmdStrings.SET_TIME, PrintStrings.SET_TIME],
+}
+
+
+def req_handle_cmd(ser: serial.Serial):
+    request_cmd = input(PrintStrings.REQUEST_STR[CFG.language])
+    request_cmd_l = request_cmd.lower()
+    if request_cmd.lower() in ["x"]:
+        return "x"
+    if request_cmd.lower() in ["h"]:
+        display_commands()
+        return "h"
+    request_cmd_d = 0
+    cmd_str = ""
+    if request_cmd_l.isdigit():
+        request_cmd_d = int(request_cmd_l)
+    if request_cmd_d in [Cmds.MAN_CTRL_IDX]:
+        cmd = Cmds(request_cmd_d)
+        print(f"{CMD_INFO[cmd][1][CFG.language]}")
+        cmd_str = CMD_PATTERN + CommandChars.MODE + CMD_MODE_MANUAL + CMD_TERMINATION
+    elif request_cmd_d in [Cmds.PING_INDEX.value]:
+        cmd = Cmds(request_cmd_d)
+        print(f"{CMD_INFO[cmd][1][CFG.language]}")
+        cmd_str = CMD_PATTERN + CMD_TERMINATION
+    elif request_cmd_d in [Cmds.REQUEST_TIME]:
+        cmd_str = (
+            CMD_PATTERN + CommandChars.REQUEST + RequestChars.TIME + CMD_TERMINATION
         )
-
-
-def main():
-    setup_cfg_from_ini()
-    print(PrintStrings.START_STR[CFG.language])
-    print(PrintStrings.CONFIG_STR[CFG.language])
-    print(f"- Serial Port | com-port : {CFG.com_port}")
-    print(f"- Serial Port Hint | port-hint : {CFG.com_port_hint}")
-    ser = serial.Serial(CFG.com_port, baudrate=115200)
-    display_commands(CFG.language)
-    while True:
-        request_cmd = input(PrintStrings.REQUEST_STR[CFG.language])
-        if request_cmd.lower() in ["x"]:
-            break
-        if request_cmd.lower() in ["h"]:
-            display_commands(CFG.language)
-            continue
-        if request_cmd.lower() in [str(Cmds.MAN_CTRL_IDX)]:
-            print(PrintStrings.MOTOR_MANUAL_STR[CFG.language])
-            cmd = CMD_PATTERN + CMD_MODE + CMD_MODE_MANUAL + CMD_TERMINATION
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.PING_INDEX)]:
-            print(PrintStrings.PING_PRINT[CFG.language])
-            cmd = CMD_PATTERN + CMD_TERMINATION
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.NORM_CTRL_IDX)]:
-            print(PrintStrings.MOTOR_NORMAL_STR[CFG.language])
-            cmd = CMD_PATTERN + CMD_MODE + CMD_MODE_NORMAL + CMD_TERMINATION
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.SET_TIME_IDX)]:
-            cmd = CMD_PATTERN + CMD_TIME
-            now = datetime.now()
-            # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
-            date_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            cmd += date_time + CMD_TERMINATION
-            print_out = PrintStrings.TIME_PRINT[CFG.language] + ": " + date_time
-            print(print_out)
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [
-            str(Cmds.CLOSE_PROT_IDX),
-            str(Cmds.OPEN_PROT_IDX),
-            str(Cmds.CLOSE_FORCE_IDX),
-            str(Cmds.OPEN_FORCE_IDX)
-        ]:
-            prot = False
-            if request_cmd.lower() == Cmds.CLOSE_PROT_IDX:
-                prot = True
-                cmd_mode = CMD_MOTOR_PROTECTED_MODE
-            else:
-                cmd_mode = CMD_MOTOR_FORCE_MODE
-            if request_cmd.lower() in [
-                str(Cmds.CLOSE_PROT_IDX),
-                str(Cmds.CLOSE_FORCE_IDX),
-            ]:
-                dir_char = CMD_MOTOR_CTRL_CLOSE
-                close = True
-            else:
-                dir_char = CMD_MOTOR_CTRL_OPEN
-                close = False
-            print(get_door_open_close_str(close=close, protected=prot))
-            cmd = CMD_PATTERN + CMD_MOTOR_CTRL + cmd_mode + dir_char + CMD_TERMINATION
-            ser.write(cmd.encode("utf-8"))
-        elif request_cmd.lower() in [str(Cmds.SET_MANUAL_TIME)]:
-            print(PrintStrings.MANUAL_TIME_CMD_STR[CFG.language])
-            time = prompt_time_from_user()
-            # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
-            date_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            cmd = CMD_PATTERN + CMD_TIME + date_time + CMD_TERMINATION
-            ser.write(cmd.encode("utf-8"))
+    elif request_cmd_d in [Cmds.NORM_CTRL_IDX]:
+        cmd = Cmds(request_cmd_d)
+        print(f"{CMD_INFO[cmd][1][CFG.language]}")
+        cmd_str = CMD_PATTERN + CommandChars.MODE + CMD_MODE_NORMAL + CMD_TERMINATION
+    elif request_cmd_d in [Cmds.SET_TIME_IDX]:
+        cmd_str = CMD_PATTERN + CommandChars.TIME
+        now = datetime.now()
+        # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
+        date_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        cmd_str += date_time + CMD_TERMINATION
+        print_out = PrintStrings.SET_TIME[CFG.language] + ": " + date_time
+        print(print_out)
+    elif request_cmd_d in [
+        Cmds.CLOSE_PROT_IDX,
+        Cmds.OPEN_PROT_IDX,
+        Cmds.CLOSE_FORCE_IDX,
+        Cmds.OPEN_FORCE_IDX,
+    ]:
+        prot = False
+        if request_cmd_d == Cmds.CLOSE_PROT_IDX:
+            prot = True
+            cmd_mode = CMD_MOTOR_PROTECTED_MODE
         else:
-            print(PrintStrings.INVALID_CMD_STR[CFG.language])
+            cmd_mode = CMD_MOTOR_FORCE_MODE
+        if request_cmd.lower() in [
+            str(Cmds.CLOSE_PROT_IDX),
+            str(Cmds.CLOSE_FORCE_IDX),
+        ]:
+            dir_char = CMD_MOTOR_CTRL_CLOSE
+            close = True
+        else:
+            dir_char = CMD_MOTOR_CTRL_OPEN
+            close = False
+        print(get_door_open_close_str(close=close, protected=prot))
+        cmd_str = (
+            CMD_PATTERN
+            + CommandChars.MOTOR_CTRL
+            + cmd_mode
+            + dir_char
+            + CMD_TERMINATION
+        )
+    elif request_cmd_d in [Cmds.SET_MANUAL_TIME]:
+        cmd = Cmds(request_cmd_d)
+        print(f"{CMD_INFO[cmd][1][CFG.language]}")
+        time = prompt_time_from_user()
+        # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
+        date_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        cmd_str = CMD_PATTERN + CommandChars.TIME + date_time + CMD_TERMINATION
+    else:
+        print(PrintStrings.INVALID_CMD_STR[CFG.language])
+    if cmd_str != "":
+        ser.write(cmd_str.encode("utf-8"))
 
-    print(PrintStrings.TERMINATION_PRINT[CFG.language])
 
-
-def display_commands(language: Languages):
+def display_commands():
     print("-" * 40)
-    print(CmdStrings.COMMANDS_STR[CFG.language])
-    print(f"{Cmds.PING_INDEX}: {CmdStrings.PING_STRING[CFG.language]}")
-    print(f"{Cmds.MAN_CTRL_IDX}: {CmdStrings.MAN_CTRL_STRING[CFG.language]}")
-    print(f"{Cmds.NORM_CTRL_IDX}: {CmdStrings.NORM_CTRL_STRING[CFG.language]}")
-    print(f"{Cmds.SET_TIME_IDX}: {CmdStrings.UPDATE_TIME_STRING[CFG.language]}")
-    print_motor_ctrl_cmd_string(
-        cmd_idx=Cmds.OPEN_PROT_IDX,
-        close=False,
-        lang=CFG.language,
-        prot=True
-    )
-    print_motor_ctrl_cmd_string(
-        cmd_idx=Cmds.CLOSE_PROT_IDX,
-        close=True,
-        lang=CFG.language,
-        prot=True
-    )
-    print_motor_ctrl_cmd_string(
-        cmd_idx=Cmds.OPEN_FORCE_IDX,
-        close=False,
-        lang=CFG.language,
-        prot=False
-    )
-    print_motor_ctrl_cmd_string(
-        cmd_idx=Cmds.CLOSE_FORCE_IDX,
-        close=True,
-        lang=CFG.language,
-        prot=False
-    )
-    print(f"{Cmds.SET_MANUAL_TIME}: {CmdStrings.UPDATE_TIME_MAN_STRING[CFG.language]}")
+    print(COMMANDS_STR[CFG.language])
+    sorted_dict = {k: CMD_INFO[k] for k in sorted(CMD_INFO)}
+    for cmd_idx, cmd in sorted_dict.items():
+        print(f"{cmd_idx}: {cmd[0][CFG.language]}")
 
 
 def setup_cfg_from_ini():
@@ -392,10 +446,10 @@ def prompt_time_from_user() -> datetime:
             print("Invalid seconds")
             continue
         break
-    time = datetime(
+    d_time = datetime(
         year=year, month=month, day=day, hour=hour, minute=minute, second=second
     )
-    return time
+    return d_time
 
 
 if __name__ == "__main__":

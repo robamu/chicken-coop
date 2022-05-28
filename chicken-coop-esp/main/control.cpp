@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 
 #include <cinttypes>
+#include <cstring>
 #include <ctime>
 #include <string>
 
@@ -40,11 +41,9 @@ void Controller::task() {
   ESP_ERROR_CHECK(i2cdev_init());
   ESP_ERROR_CHECK(ds3231_init_desc(&i2c, I2C_NUM_0, I2C_SDA, I2C_SCL));
   ds3231_get_time(&i2c, &currentTime);
-  updateDoorState();
-  updateCurrentOpenCloseTimes(true);
-  char timeBuf[64] = {};
   strftime(timeBuf, sizeof(timeBuf) - 1, "%Y-%m-%d %H:%M:%S", &currentTime);
   ESP_LOGI(CTRL_TAG, "Detected current time: %s", timeBuf);
+  updateDoorState();
   if (doorswitch::opened()) {
     ESP_LOGI(CTRL_TAG, "Door is opened");
   } else {
@@ -63,8 +62,6 @@ void Controller::task() {
 }
 
 void Controller::stateMachine() {
-  // Handle all events
-  handleUartReception();
 #if APP_FORCE_TIME_RELOAD == 1
   // Set compile time
   time_t seconds = __TIME_UNIX__;
@@ -73,6 +70,10 @@ void Controller::stateMachine() {
 #endif
 
   ds3231_get_time(&i2c, &currentTime);
+
+  // Handle all events
+  handleUartReception();
+
   updateDoorState();
 
   // INIT mode: System just came up and we need to check whether any operations are necessary
@@ -86,10 +87,9 @@ void Controller::stateMachine() {
     }
   }
   if (appState == AppStates::INIT) {
-    currentDay = currentTime.tm_mday;
-    currentMonth = currentTime.tm_mon;
-    updateCurrentOpenCloseTimes(false);
     if (initPrintSwitch) {
+      updateCurrentDayAndMonth();
+      updateCurrentOpenCloseTimes(true);
       initPrintSwitch = false;
     }
     int result = performInitMode();
@@ -322,8 +322,13 @@ void Controller::handleUartCommand(std::string cmd) {
     return;
   }
   char cmdByte = rawCmd[2];
-  switch (cmdByte) {
-    case (CMD_MODE): {
+  if (not validCmd(cmdByte)) {
+    ESP_LOGW(CTRL_TAG, "Invalid command byte %c detected", cmdByte);
+    return;
+  }
+  Cmds typedCmd = static_cast<Cmds>(cmdByte);
+  switch (typedCmd) {
+    case (Cmds::MODE): {
       if (cmd.length() < 4) {
         ESP_LOGW(CTRL_TAG, "Invalid mode command detected");
         return;
@@ -347,7 +352,40 @@ void Controller::handleUartCommand(std::string cmd) {
       }
       break;
     }
-    case (CMD_TIME): {
+    case (Cmds::REQUEST): {
+      if (cmd.length() < 4) {
+        ESP_LOGW(CTRL_TAG, "Invalid print command detected");
+        return;
+      }
+      char printChar = rawCmd[3];
+      if (printChar == static_cast<char>(RequestCmds::TIME)) {
+        size_t strLen = strftime(timeBuf, sizeof(timeBuf) - 1, "%Y-%m-%d %H:%M:%S", &currentTime);
+        ESP_LOGI(CTRL_TAG, "Current time %s was reqeusted", timeBuf);
+        size_t currentIdx = 0;
+        UART_REPLY_BUF[currentIdx] = PATTERN_CHAR;
+        currentIdx++;
+        UART_REPLY_BUF[currentIdx] = PATTERN_CHAR;
+        currentIdx++;
+        UART_REPLY_BUF[currentIdx] = static_cast<char>(typedCmd);
+        currentIdx++;
+        UART_REPLY_BUF[currentIdx] = printChar;
+        currentIdx++;
+        if (strLen + 3 > UART_REPLY_BUF.size()) {
+          // This should never happen..
+          return;
+        }
+        std::memcpy(UART_REPLY_BUF.data() + currentIdx, timeBuf, strLen);
+        currentIdx += strLen;
+        UART_REPLY_BUF[currentIdx] = '\n';
+        currentIdx += 1;
+        int result = uart_write_bytes(UART_NUM, UART_REPLY_BUF.data(), currentIdx);
+        if (result < 0) {
+          ESP_LOGI(CTRL_TAG, "UART write failed with code: %d", result);
+        }
+      }
+      break;
+    }
+    case (Cmds::TIME): {
       std::string timeString = cmd.substr(3, cmd.size() - 3 - 1);
       ESP_LOGI(CTRL_TAG, "Received time string %s", timeString.c_str());
       struct tm timeParsed = {};
@@ -361,7 +399,7 @@ void Controller::handleUartCommand(std::string cmd) {
       }
       break;
     }
-    case (CMD_MOTOR_CTRL): {
+    case (Cmds::MOTOR_CTRL): {
       if (appState != AppStates::MANUAL) {
         ESP_LOGW(CTRL_TAG,
                  "Received motor control command but not in manual mode. "
@@ -414,13 +452,18 @@ void Controller::handleUartCommand(std::string cmd) {
 }
 
 void Controller::updateCurrentOpenCloseTimes(bool printTimes) {
+  if (currentMonth == -1 or currentDay == -1) {
+    ESP_LOGE(CTRL_TAG, "Invalid current month or current day");
+  }
   uint32_t openHour = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][0];
   uint32_t openMinute = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][1];
   uint32_t closeHour = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][2];
   uint32_t closeMinute = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3];
   if (printTimes) {
-    ESP_LOGI(CTRL_TAG, "Opening time for today: %02d:%02d | Closing time for today: %02d:%02d",
-             openHour, openMinute, closeHour, closeMinute);
+    ESP_LOGI(CTRL_TAG,
+             "Date: %02d.%02d | Opening time : %02d:%02d | "
+             "Closing time for today: %02d:%02d",
+             currentDay + 1, currentMonth + 1, openHour, openMinute, closeHour, closeMinute);
   }
   currentOpenDayMinutes = getDayMinutesFromHourAndMinute(openHour, openMinute);
   currentCloseDayMinutes = getDayMinutesFromHourAndMinute(closeHour, closeMinute);
@@ -474,6 +517,20 @@ void Controller::motorCtrlDone() {
   if (forcedOp) {
     forcedOp = false;
   }
+}
+
+bool Controller::validCmd(char rawCmd) {
+  if (rawCmd == 'C' or rawCmd == 'T' or rawCmd == 'R' or rawCmd == 'M') {
+    return true;
+  }
+  return false;
+}
+
+void Controller::updateCurrentDayAndMonth() {
+  // See: https://www.cplusplus.com/reference/ctime/tm/
+  // Month goes from 0 to 11, but day from 1 - 31
+  currentDay = currentTime.tm_mday - 1;
+  currentMonth = currentTime.tm_mon;
 }
 
 void Controller::uartInit() {

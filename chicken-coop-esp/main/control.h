@@ -37,9 +37,15 @@ class Controller {
 
   static constexpr char CTRL_TAG[] = "ctrl";
   static constexpr char PATTERN_CHAR = 'C';
-  static constexpr char CMD_MODE = 'C';
-  static constexpr char CMD_MOTOR_CTRL = 'M';
-  static constexpr char CMD_TIME = 'T';
+
+  enum class Cmds : char {
+    MODE = 'C',
+    MOTOR_CTRL = 'M',
+    TIME = 'T',
+    REQUEST = 'R',
+  };
+
+  enum class RequestCmds : char { TIME = 'T' };
 
   static constexpr char CMD_MODE_MANUAL = 'M';
   static constexpr char CMD_MODE_NORMAL = 'N';
@@ -67,10 +73,12 @@ class Controller {
   static QueueHandle_t UART_QUEUE;
   static uart_config_t UART_CFG;
   std::array<uint8_t, 524> UART_RECV_BUF = {};
+  std::array<uint8_t, 256> UART_REPLY_BUF = {};
   static constexpr size_t UART_RING_BUF_SIZE = 524;
   static constexpr uint8_t UART_QUEUE_DEPTH = 20;
   uint32_t startTime = 0;
   i2c_dev_t i2c = {};
+  char timeBuf[64] = {};
 
   tm currentTime = {};
 
@@ -80,15 +88,16 @@ class Controller {
   bool closeExecuted = false;
 
   // Day from 0 to 30
-  int currentDay = 0;
+  int currentDay = -1;
   // Month from 0 to 11
-  int currentMonth = 0;
+  int currentMonth = -1;
 
   int currentOpenDayMinutes = 0;
   int currentCloseDayMinutes = 0;
 
   void task();
 
+  bool validCmd(char rawCmd);
   void stateMachine();
   void handleUartReception();
   void handleUartCommand(std::string cmd);
@@ -96,6 +105,7 @@ class Controller {
   int performInitMode();
   void updateDoorState();
   void performIdleMode();
+  void updateCurrentDayAndMonth();
   void updateCurrentOpenCloseTimes(bool printTimes);
   int initOpen();
   int initClose();
