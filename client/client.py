@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 from typing import List
 
 import serial
@@ -7,6 +8,7 @@ import enum
 
 import configparser
 from mod.ser import prompt_com_port, find_com_port_from_hint
+from datetime import timedelta
 from datetime import datetime
 
 
@@ -285,6 +287,9 @@ def req_handle_cmd(ser: serial.Serial):
     elif request_cmd_d in [Cmds.SET_TIME_IDX]:
         cmd_str = CMD_PATTERN + CommandChars.TIME
         now = datetime.now()
+        # Store time without daylight saving time
+        if time.localtime().tm_isdst == 1:
+            now = now + timedelta(hours=-1)
         # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
         date_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         cmd_str += date_time + CMD_TERMINATION
@@ -322,9 +327,9 @@ def req_handle_cmd(ser: serial.Serial):
     elif request_cmd_d in [Cmds.SET_MANUAL_TIME]:
         cmd = Cmds(request_cmd_d)
         print(f"{CMD_INFO[cmd][1][CFG.language]}")
-        time = prompt_time_from_user()
+        tgt_time = prompt_time_from_user()
         # ASCII Time Code A from CCSDS 301.0-B-4, p.19. No milliseconds accuracy
-        date_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        date_time = tgt_time.strftime("%Y-%m-%dT%H:%M:%SZ")
         cmd_str = CMD_PATTERN + CommandChars.TIME + date_time + CMD_TERMINATION
     else:
         print(PrintStrings.INVALID_CMD_STR[CFG.language])

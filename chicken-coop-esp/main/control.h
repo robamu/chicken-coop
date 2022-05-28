@@ -7,6 +7,7 @@
 #include <ctime>
 
 #include "i2cdev.h"
+#include "led.h"
 #include "motor.h"
 
 void controlTask(void* args);
@@ -15,7 +16,7 @@ class Controller {
  public:
   enum class AppStates { START_DELAY, INIT, IDLE, MANUAL };
 
-  Controller(Motor& motor, AppStates initState = AppStates::START_DELAY);
+  Controller(Motor& motor, Led& led, AppStates initState = AppStates::START_DELAY);
 
   void setAppState(AppStates appState);
   void preTaskInit();
@@ -55,6 +56,8 @@ class Controller {
 
   static constexpr char CMD_MOTOR_CTRL_OPEN = 'O';
   static constexpr char CMD_MOTOR_CTRL_CLOSE = 'C';
+  static constexpr uint32_t BLINK_PERIOD_IDLE = 5000;
+  static constexpr uint32_t BLINK_PERIOD_INIT = 3000;
 
   enum class DoorStates {
     UNKNOWN,
@@ -65,6 +68,7 @@ class Controller {
   enum class CmdStates { IDLE, MOTOR_CTRL_OPEN, MOTOR_CTRL_CLOSE } cmdState = CmdStates::IDLE;
 
   Motor& motor;
+  Led& led;
   AppStates appState = AppStates::INIT;
   TaskHandle_t taskHandle = nullptr;
   static constexpr uart_port_t UART_NUM = UART_NUM_1;
@@ -78,14 +82,17 @@ class Controller {
   static constexpr uint8_t UART_QUEUE_DEPTH = 20;
   uint32_t startTime = 0;
   i2c_dev_t i2c = {};
+  LedCfg motorOpCfg;
+  LedCfg idleCfg;
+  LedCfg initCfg;
   char timeBuf[64] = {};
 
   tm currentTime = {};
 
   bool initPrintSwitch = true;
   bool openExecuted = false;
-  bool forcedOp = false;
   bool closeExecuted = false;
+  bool forcedOp = false;
 
   // Day from 0 to 30
   int currentDay = -1;
@@ -99,6 +106,8 @@ class Controller {
 
   bool validCmd(char rawCmd);
   void stateMachine();
+  // Can be used if time is changed externally to re-trigger any door operations immediately
+  void resetToInitState();
   void handleUartReception();
   void handleUartCommand(std::string cmd);
   // Returns 0 if initialization is done, otherwise 1

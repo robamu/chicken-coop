@@ -21,7 +21,18 @@ static constexpr esp_log_level_t LOG_LEVEL = ESP_LOG_INFO;
 QueueHandle_t Controller::UART_QUEUE = nullptr;
 uart_config_t Controller::UART_CFG = {};
 
-Controller::Controller(Motor& motor, AppStates initState) : motor(motor), appState(initState) {}
+Controller::Controller(Motor& motor, Led& led, AppStates initState)
+    : motor(motor), led(led), appState(initState) {
+  motorOpCfg.brightness = 64;
+  motorOpCfg.color = Colors::GREEN;
+  motorOpCfg.periodMs = 200;
+  idleCfg.brightness = 64;
+  idleCfg.color = Colors::WHITE_DIM;
+  idleCfg.periodMs = BLINK_PERIOD_IDLE;
+  initCfg.brightness = 64;
+  initCfg.color = Colors::WHITE_DIM;
+  initCfg.periodMs = BLINK_PERIOD_INIT;
+}
 
 void Controller::preTaskInit() {
   esp_log_level_set(CTRL_TAG, LOG_LEVEL);
@@ -95,6 +106,7 @@ void Controller::stateMachine() {
     int result = performInitMode();
     if (result == 0) {
       ESP_LOGI(CTRL_TAG, "Going to IDLE mode");
+      led.setCurrentCfg(idleCfg);
       // If everything is done
       appState = AppStates::IDLE;
     }
@@ -204,6 +216,7 @@ void Controller::performIdleMode() {
       // Motor control might already be pending
       if (cmdState != CmdStates::MOTOR_CTRL_OPEN) {
         ESP_LOGI(CTRL_TAG, "Opening door in IDLE mode");
+        led.setCurrentCfg(motorOpCfg);
         bool success = motor.requestOpen();
         if (success) {
           cmdState = CmdStates::MOTOR_CTRL_OPEN;
@@ -229,6 +242,7 @@ void Controller::performIdleMode() {
       // Motor control might already be pending
       if (cmdState != CmdStates::MOTOR_CTRL_CLOSE) {
         ESP_LOGI(CTRL_TAG, "Closing door in IDLE mode");
+        led.setCurrentCfg(motorOpCfg);
         bool success = motor.requestClose();
         if (success) {
           cmdState = CmdStates::MOTOR_CTRL_CLOSE;
@@ -255,6 +269,7 @@ int Controller::initOpen() {
   if (doorState == DoorStates::DOOR_CLOSE) {
     if (cmdState == CmdStates::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be opened in INIT mode. Opening door");
+      led.setCurrentCfg(motorOpCfg);
       bool requestSuccess = motor.requestOpen();
       if (requestSuccess) {
         cmdState = CmdStates::MOTOR_CTRL_OPEN;
@@ -266,6 +281,7 @@ int Controller::initOpen() {
       if (motor.operationDone()) {
         ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
         doorState = DoorStates::DOOR_OPEN;
+        led.blinkDefault();
         motorCtrlDone();
       }
     }
@@ -281,6 +297,8 @@ int Controller::initClose() {
   if (doorState == DoorStates::DOOR_OPEN) {
     if (cmdState == CmdStates::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be closed in INIT mode. Closing door");
+      led.setCurrentCfg(motorOpCfg);
+      ;
       bool requestSuccess = motor.requestClose();
       if (requestSuccess) {
         cmdState = CmdStates::MOTOR_CTRL_CLOSE;
@@ -295,6 +313,7 @@ int Controller::initClose() {
           ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
         }
         doorState = DoorStates::DOOR_CLOSE;
+        led.blinkDefault();
         motorCtrlDone();
       }
     }
@@ -355,7 +374,7 @@ void Controller::handleUartCommand(std::string cmd) {
         }
       } else if (modeByte == CMD_MODE_NORMAL) {
         ESP_LOGI(CTRL_TAG, "Switching to normal mode");
-        appState = AppStates::INIT;
+        resetToInitState();
       } else {
         ESP_LOGW(CTRL_TAG, "Invalid mode specifier %c detected, M (manual) and N (normal) allowed",
                  modeByte);
@@ -404,7 +423,7 @@ void Controller::handleUartCommand(std::string cmd) {
         ESP_LOGI(CTRL_TAG, "Setting received time in DS3231 clock");
         ds3231_set_time(&i2c, &timeParsed);
         ESP_LOGI(CTRL_TAG, "Setting INIT mode");
-        appState = AppStates::INIT;
+        resetToInitState();
       } else {
         // Invalid date format. Send NAK reply
         ESP_LOGW(CTRL_TAG, "Invalid date format. Pointer where parsing failed: %d", parseResult);
@@ -525,6 +544,13 @@ Direction Controller::dirMapper(bool close) {
 void Controller::setAppState(AppStates appState) { this->appState = appState; }
 
 void Controller::motorCtrlDone() {
+  if (appState == AppStates::IDLE) {
+    led.setCurrentCfg(idleCfg);
+  } else if (appState == AppStates::INIT) {
+    led.setCurrentCfg(initCfg);
+  } else {
+    led.blinkDefault();
+  }
   cmdState = CmdStates::IDLE;
   if (forcedOp) {
     forcedOp = false;
@@ -607,3 +633,9 @@ void Controller::handleUartReception() {
 }
 
 int Controller::getDayMinutesFromHourAndMinute(int hour, int minute) { return hour * 60 + minute; }
+
+void Controller::resetToInitState() {
+  appState = AppStates::INIT;
+  openExecuted = false;
+  closeExecuted = false;
+}
