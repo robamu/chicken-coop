@@ -3,9 +3,10 @@ menu "Chicken Coop Configuration"
     config CHICKEN_COOP_REVOLUTIONS
         int "Open/Close door revolutions"
         range 0 36
-        default 12
+        default 14
         help
-            Number of revolutions to open or close chicken coop door
+            Number of revolutions to open or close chicken coop door. Close revolutions will always
+            be one more to ensure door is fully closed.
 
     config DEFAULT_FULL_OPEN_CLOSE_DURATION
         int "Open/Close duration [s]"

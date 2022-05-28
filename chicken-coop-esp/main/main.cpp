@@ -18,8 +18,8 @@ TaskHandle_t CONTROL_TASK_HANDLE = nullptr;
 TaskHandle_t MOTOR_TASK_HANDLE = nullptr;
 TaskHandle_t LED_TASK_HANDLE = nullptr;
 
-Motor MOTOR_OBJ = Motor(config::DEFAULT_FULL_OPEN_CLOSE_DURATION, config::REVOLUTIONS_MAX, nullptr,
-                        nullptr, nullptr);
+Motor MOTOR_OBJ = Motor(config::DEFAULT_FULL_OPEN_CLOSE_DURATION, config::REVOLUTIONS_CLOSE_MAX,
+                        nullptr, nullptr, nullptr);
 Controller CONTROLLER_OBJ = Controller(MOTOR_OBJ);
 Led LED_OBJ = Led();
 

@@ -42,17 +42,18 @@ def reply_handler(ser: serial.Serial):
         if reply[0] != ord("C") or reply[1] != ord("C"):
             print('Invalid reply format, must start with "CC"')
             continue
-        if len(reply) == 2:
-            print("Received ping reply")
+        if len(reply) == 3:
+            print(f"{PrintStrings.PING_REPLY[CFG.language]}")
         elif len(reply) < 4:
             print("Invalid reply length detected")
             continue
-        if reply[2] == ord(CommandChars.REQUEST):
-            if reply[3] == ord(RequestChars.TIME):
-                time_str = reply[4:].rstrip("\n".encode()).decode()
-                print(f"Received current time on the ESP32: {time_str}")
         else:
-            print(f"Received {reply} with no implemented reply handling")
+            if reply[2] == ord(CommandChars.REQUEST):
+                if reply[3] == ord(RequestChars.TIME):
+                    time_str = reply[4:].rstrip("\n".encode()).decode()
+                    print(f"Received current time on the ESP32: {time_str}")
+            else:
+                print(f"Received {reply} with no implemented reply handling")
         print(PrintStrings.REQUEST_STR[CFG.language], end="")
 
 
@@ -127,6 +128,7 @@ class PrintStrings:
         "Closing door in protected mode",
     ]
     INVALID_CMD_STR = ["Invalid command", "Ungültiges Kommando"]
+    PING_REPLY = ["Received ping reply", "Ping Antwort bekommen"]
     MANUAL_TIME_CMD_STR = ["Setting manual time", "Setze manuelle Uhrzeit"]
 
 

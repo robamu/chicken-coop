@@ -15,7 +15,8 @@ static constexpr bool START_IN_MANUAL_MODE = true;
 static constexpr bool START_IN_MANUAL_MODE = false;
 #endif
 
-static constexpr uint32_t REVOLUTIONS_MAX = CONFIG_CHICKEN_COOP_REVOLUTIONS;
+static constexpr unsigned int REVOLUTIONS_OPEN_MAX = CONFIG_CHICKEN_COOP_REVOLUTIONS;
+static constexpr unsigned int REVOLUTIONS_CLOSE_MAX = REVOLUTIONS_OPEN_MAX + 1;
 // Duration in seconds. Maximum value: 1000
 static constexpr uint32_t DEFAULT_FULL_OPEN_CLOSE_DURATION =
     CONFIG_DEFAULT_FULL_OPEN_CLOSE_DURATION;

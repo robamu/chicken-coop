@@ -403,6 +403,8 @@ void Controller::handleUartCommand(std::string cmd) {
       if (parseResult != nullptr) {
         ESP_LOGI(CTRL_TAG, "Setting received time in DS3231 clock");
         ds3231_set_time(&i2c, &timeParsed);
+        ESP_LOGI(CTRL_TAG, "Setting INIT mode");
+        appState = AppStates::INIT;
       } else {
         // Invalid date format. Send NAK reply
         ESP_LOGW(CTRL_TAG, "Invalid date format. Pointer where parsing failed: %d", parseResult);
@@ -486,7 +488,7 @@ bool Controller::motorStopCondition(Direction dir, uint8_t revIdx, void* args) {
   bool result = false;
   if (dir == closeDir) {
     // Upper limit for closing
-    if (revIdx == config::REVOLUTIONS_MAX) {
+    if (revIdx == config::REVOLUTIONS_CLOSE_MAX) {
       result = true;
     } else {
       if (not ctrl->forcedOp) {
@@ -495,7 +497,7 @@ bool Controller::motorStopCondition(Direction dir, uint8_t revIdx, void* args) {
       }
     }
   } else if (dir == openDir) {
-    if (revIdx == config::REVOLUTIONS_MAX) {
+    if (revIdx == config::REVOLUTIONS_OPEN_MAX) {
       result = true;
     }
   }
