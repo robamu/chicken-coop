@@ -62,7 +62,7 @@ void Controller::task() {
   }
   startTime = xTaskGetTickCount();
   if (appState == AppStates::START_DELAY) {
-    ESP_LOGI(CTRL_TAG, "Waiting for %d seconds before going into initialization mode..",
+    ESP_LOGI(CTRL_TAG, "Waiting for %lu seconds before going into initialization mode..",
              START_DELAY_MS / 1000);
   }
   while (true) {
@@ -426,7 +426,7 @@ void Controller::handleUartCommand(std::string cmd) {
         resetToInitState();
       } else {
         // Invalid date format. Send NAK reply
-        ESP_LOGW(CTRL_TAG, "Invalid date format. Pointer where parsing failed: %d", parseResult);
+        ESP_LOGW(CTRL_TAG, "Invalid date format. Pointer where parsing failed: %s", parseResult);
       }
       break;
     }
@@ -492,8 +492,8 @@ void Controller::updateCurrentOpenCloseTimes(bool printTimes) {
   uint32_t closeMinute = OPEN_CLOSE_MONTHS[currentMonth]->month[currentDay][3];
   if (printTimes) {
     ESP_LOGI(CTRL_TAG,
-             "Date: %02d.%02d | Opening time : %02d:%02d | "
-             "Closing time for today: %02d:%02d",
+             "Date: %02d.%02d | Opening time : %02lu:%02lu | "
+             "Closing time for today: %02lu:%02lu",
              currentDay + 1, currentMonth + 1, openHour, openMinute, closeHour, closeMinute);
   }
   currentOpenDayMinutes = getDayMinutesFromHourAndMinute(openHour, openMinute);

@@ -34,7 +34,7 @@ void Motor::taskOp() {
     ESP_LOGW(MOTOR_TAG, "Maximum is 1000 seconds. Assuming 60 seconds");
     fullOpenCloseDuration = 60;
   }
-  uint32_t stepDelayUs = fullOpenCloseDuration * 1000 * 1000 / 12 / 4096;
+  unsigned stepDelayUs = fullOpenCloseDuration * 1000 * 1000 / 12 / 4096;
   if (stepDelayUs <= 1000) {
     ESP_LOGI(MOTOR_TAG,
              "Calculated delay between steps is less than 1 millisecond with %d microseconds",

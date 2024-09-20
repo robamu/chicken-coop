@@ -5,6 +5,7 @@
 
 #include <array>
 #include <ctime>
+#include <string>
 
 #include "i2cdev.h"
 #include "led.h"

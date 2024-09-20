@@ -54,10 +54,10 @@ class Motor {
 
   Direction direction = Direction::CLOCK_WISE;
   TaskHandle_t taskHandle = nullptr;
-  uint32_t fullOpenCloseDuration = 0;
-  uint32_t revolutionsMax = 0;
-  uint32_t defaultFullOpenCloseDuration = 0;
-  uint32_t stepDelayMs = 0;
+  unsigned fullOpenCloseDuration = 0;
+  unsigned revolutionsMax = 0;
+  unsigned defaultFullOpenCloseDuration = 0;
+  unsigned stepDelayMs = 0;
   bool opPending = false;
 
   void taskOp();
