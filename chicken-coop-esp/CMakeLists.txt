@@ -31,8 +31,8 @@ project(chicken-coop-esp)
 
 # idf_build_set_property(CXX_COMPILE_OPTIONS "-std=c++17" APPEND)
 
-set(APP_VERSION_MAJOR 0)
-set(APP_VERSION_MINOR 1)
+set(APP_VERSION_MAJOR 1)
+set(APP_VERSION_MINOR 0)
 set(APP_VERSION_REVISION 0)
 
 configure_file(main/usr_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/usr_config.h)
