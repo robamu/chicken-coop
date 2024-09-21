@@ -93,22 +93,11 @@ CMD_MOTOR_CTRL_STOP = "S"
 
 class PrintString:
     START = ["Chicken Coop Door Client"]
-    CONFIG = [
-        "Detected following parameters from config.ini file:",
-    ]
-    REQUEST_STR = [
-        "Please specify a command. 'x' to exit, 'h' to display commands: ",
-    ]
-
-    TERMINATION_PRINT = [
-        "Closing Chicken Coop Door Client",
-    ]
-    PING = [
-        "Sending ping to controller",
-    ]
-    SET_TIME = [
-        "Setting current time in controller",
-    ]
+    CONFIG = ["Detected following parameters from config.ini file:"]
+    REQUEST_STR = ["Please specify a command. 'x' to exit, 'h' to display commands: "]
+    TERMINATION_PRINT = ["Closing Chicken Coop Door Client"]
+    PING = ["Sending ping to controller"]
+    SET_TIME = ["Setting current time in controller"]
     MOTOR_MAN_CTRL = [
         "Sending command to switch to manual motor control",
     ]

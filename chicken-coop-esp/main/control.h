@@ -16,7 +16,7 @@ void controlTask(void* args);
 
 class Controller {
  public:
-  enum class AppStates { START_DELAY, INIT, IDLE, MANUAL };
+  enum class AppStates { START_DELAY, INIT, NORMAL, MANUAL };
 
   Controller(Led& led, AppStates initState = AppStates::START_DELAY);
 
@@ -25,8 +25,7 @@ class Controller {
 
   static void taskEntryPoint(void* args);
 
-  static bool motorStopCondition(Direction dir, void* args);
-  static Direction dirMapper(bool close);
+  bool checkMotorOperationDone();
 
   static int getDayMinutesFromHourAndMinute(int hour, int minute);
 
@@ -83,7 +82,9 @@ class Controller {
   std::array<uint8_t, 256> UART_REPLY_BUF = {};
   static constexpr size_t UART_RING_BUF_SIZE = 524;
   static constexpr uint8_t UART_QUEUE_DEPTH = 20;
-  uint32_t startTime = 0;
+
+  TickType_t startTime = 0;
+  TickType_t motorStartTime = 0;
   i2c_dev_t i2c = {};
   LedCfg motorOpCfg;
   LedCfg idleCfg;
@@ -113,10 +114,13 @@ class Controller {
   void resetToInitState();
   void handleUartReception();
   void handleUartCommand(std::string cmd);
-  // Returns 0 if initialization is done, otherwise 1
-  int performInitMode();
+  // This is run after the controller has booted. It checks whether any operations are necessary.
+  // Returns 0 if initialization is done, otherwise 1.
+  int stateMachineInit();
+  // This is the regular normal mode after the init mode has completed.
+  void stateMachineNormal();
+
   void updateDoorState();
-  void performIdleMode();
   void updateCurrentDayAndMonth();
   void updateCurrentOpenCloseTimes(bool printTimes);
   int initOpen();

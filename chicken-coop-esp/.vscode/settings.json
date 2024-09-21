@@ -3,5 +3,5 @@
     "files.associations": {
         "ctime": "cpp"
     },
-    "idf.flashType": "JTAG"
+    "idf.flashType": "UART"
 }
