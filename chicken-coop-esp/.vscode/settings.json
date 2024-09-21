@@ -2,5 +2,6 @@
     "idf.adapterTargetName": "esp32c3",
     "files.associations": {
         "ctime": "cpp"
-    }
+    },
+    "idf.flashType": "JTAG"
 }

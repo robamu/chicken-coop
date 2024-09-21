@@ -7,6 +7,7 @@
 #include <ctime>
 #include <string>
 
+#include "conf.h"
 #include "i2cdev.h"
 #include "led.h"
 #include "motor.h"
@@ -17,14 +18,14 @@ class Controller {
  public:
   enum class AppStates { START_DELAY, INIT, IDLE, MANUAL };
 
-  Controller(Motor& motor, Led& led, AppStates initState = AppStates::START_DELAY);
+  Controller(Led& led, AppStates initState = AppStates::START_DELAY);
 
   void setAppState(AppStates appState);
   void preTaskInit();
 
   static void taskEntryPoint(void* args);
 
-  static bool motorStopCondition(Direction dir, uint8_t revIdx, void* args);
+  static bool motorStopCondition(Direction dir, void* args);
   static Direction dirMapper(bool close);
 
   static int getDayMinutesFromHourAndMinute(int hour, int minute);
@@ -57,6 +58,8 @@ class Controller {
 
   static constexpr char CMD_MOTOR_CTRL_OPEN = 'O';
   static constexpr char CMD_MOTOR_CTRL_CLOSE = 'C';
+  static constexpr char CMD_MOTOR_CTRL_STOP = 'S';
+
   static constexpr uint32_t BLINK_PERIOD_IDLE = 5000;
   static constexpr uint32_t BLINK_PERIOD_INIT = 3000;
 
@@ -66,9 +69,8 @@ class Controller {
     DOOR_CLOSE,
   } doorState = DoorStates::UNKNOWN;
 
-  enum class CmdStates { IDLE, MOTOR_CTRL_OPEN, MOTOR_CTRL_CLOSE } cmdState = CmdStates::IDLE;
+  enum class MotorDriveState { IDLE, OPENING, CLOSING } motorState = MotorDriveState::IDLE;
 
-  Motor& motor;
   Led& led;
   AppStates appState = AppStates::INIT;
   TaskHandle_t taskHandle = nullptr;
@@ -120,6 +122,11 @@ class Controller {
   int initOpen();
   int initClose();
   void motorCtrlDone();
+
+  void openDoor();
+  void closeDoor();
+  void driveDoorMotor(bool dir1);
+
   /**
    * Call before starting the controller task!
    */

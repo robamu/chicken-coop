@@ -12,6 +12,7 @@
 #include <string>
 
 #include "compile_time.h"
+#include "conf.h"
 #include "open_close_times.h"
 #include "switch.h"
 #include "usr_config.h"
@@ -21,8 +22,7 @@ static constexpr esp_log_level_t LOG_LEVEL = ESP_LOG_INFO;
 QueueHandle_t Controller::UART_QUEUE = nullptr;
 uart_config_t Controller::UART_CFG = {};
 
-Controller::Controller(Motor& motor, Led& led, AppStates initState)
-    : motor(motor), led(led), appState(initState) {
+Controller::Controller(Led& led, AppStates initState) : led(led), appState(initState) {
   motorOpCfg.brightness = 64;
   motorOpCfg.color = Colors::GREEN;
   motorOpCfg.periodMs = 200;
@@ -119,25 +119,19 @@ void Controller::stateMachine() {
     if (initPrintSwitch) {
       initPrintSwitch = false;
     }
-    ESP_LOGV(CTRL_TAG, "Command state Manual Mode: %d", static_cast<uint8_t>(cmdState));
-    switch (cmdState) {
-      case (CmdStates::MOTOR_CTRL_CLOSE): {
-        ESP_LOGV(CTRL_TAG, "Checking motor close done");
-        if (motor.operationDone()) {
-          ESP_LOGI(CTRL_TAG, "Close operation in manual mode done");
-          motorCtrlDone();
-        }
+    ESP_LOGV(CTRL_TAG, "Command state Manual Mode: %d", static_cast<uint8_t>(motorState));
+    switch (motorState) {
+      case (MotorDriveState::OPENING): {
+        openDoor();
         break;
       }
-      case (CmdStates::MOTOR_CTRL_OPEN): {
-        ESP_LOGV(CTRL_TAG, "Checking motor open done");
-        if (motor.operationDone()) {
-          ESP_LOGI(CTRL_TAG, "Open operation in manual mode done");
-          motorCtrlDone();
-        }
+      case (MotorDriveState::CLOSING): {
+        closeDoor();
         break;
       }
-      case (CmdStates::IDLE):
+      case (MotorDriveState::IDLE): {
+        motor::stop();
+      }
       default: {
         break;
       }
@@ -214,52 +208,47 @@ void Controller::performIdleMode() {
   if (not openExecuted and dayMinutes >= currentOpenDayMinutes) {
     if (doorState == DoorStates::DOOR_CLOSE) {
       // Motor control might already be pending
-      if (cmdState != CmdStates::MOTOR_CTRL_OPEN) {
+      if (motorState != MotorDriveState::OPENING) {
         ESP_LOGI(CTRL_TAG, "Opening door in IDLE mode");
         led.setCurrentCfg(motorOpCfg);
-        bool success = motor.requestOpen();
-        if (success) {
-          cmdState = CmdStates::MOTOR_CTRL_OPEN;
-        } else {
-          ESP_LOGW(CTRL_TAG, "Tried to request door open in IDLE mode, but motor is busy");
-        }
+        openDoor();
+        motorState = MotorDriveState::OPENING;
       }
     }
-    if (cmdState == CmdStates::MOTOR_CTRL_OPEN) {
-      if (motor.operationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door opening operation in IDLE mode done");
-        if (doorswitch::closed()) {
-          ESP_LOGW(CTRL_TAG, "Door should be opened but is closed according to switch");
-        }
-        motorCtrlDone();
-        openExecuted = true;
+    if (motorState == MotorDriveState::OPENING) {
+      // TODO: Fix done condition.
+      // if (motor.operationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door opening operation in IDLE mode done");
+      if (doorswitch::closed()) {
+        ESP_LOGW(CTRL_TAG, "Door should be opened but is closed according to switch");
+        motor::stop();
       }
+      motorCtrlDone();
+      openExecuted = true;
+      //}
     }
   }
 
   if (not closeExecuted and dayMinutes >= currentCloseDayMinutes) {
     if (doorState == DoorStates::DOOR_OPEN) {
       // Motor control might already be pending
-      if (cmdState != CmdStates::MOTOR_CTRL_CLOSE) {
+      if (motorState != MotorDriveState::CLOSING) {
         ESP_LOGI(CTRL_TAG, "Closing door in IDLE mode");
         led.setCurrentCfg(motorOpCfg);
-        bool success = motor.requestClose();
-        if (success) {
-          cmdState = CmdStates::MOTOR_CTRL_CLOSE;
-        } else {
-          ESP_LOGW(CTRL_TAG, "Tried to request door close, but motor is busy");
-        }
+        closeDoor();
+        motorState = MotorDriveState::CLOSING;
       }
     }
-    if (cmdState == CmdStates::MOTOR_CTRL_CLOSE) {
-      if (motor.operationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door closing operation in IDLE mode done");
-        if (doorswitch::opened()) {
-          ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
-        }
-        motorCtrlDone();
-        closeExecuted = true;
+    if (motorState == MotorDriveState::CLOSING) {
+      // TODO: Fix logic.
+      // if (motor.operationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door closing operation in IDLE mode done");
+      if (doorswitch::opened()) {
+        ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
       }
+      motorCtrlDone();
+      closeExecuted = true;
+      //}
     }
   }
 }
@@ -267,23 +256,20 @@ void Controller::performIdleMode() {
 int Controller::initOpen() {
   // This needs to be executed in any case
   if (doorState == DoorStates::DOOR_CLOSE) {
-    if (cmdState == CmdStates::IDLE) {
+    if (motorState == MotorDriveState::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be opened in INIT mode. Opening door");
       led.setCurrentCfg(motorOpCfg);
-      bool requestSuccess = motor.requestOpen();
-      if (requestSuccess) {
-        cmdState = CmdStates::MOTOR_CTRL_OPEN;
-      } else {
-        ESP_LOGW(CTRL_TAG, "Tried to request door open in INIT mode, but motor is busy");
-      }
+      closeDoor();
+      motorState = MotorDriveState::OPENING;
     }
-    if (cmdState == CmdStates::MOTOR_CTRL_OPEN) {
-      if (motor.operationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
-        doorState = DoorStates::DOOR_OPEN;
-        led.blinkDefault();
-        motorCtrlDone();
-      }
+    if (motorState == MotorDriveState::OPENING) {
+      // TODO: Fix logic.
+      // if (motor.operationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
+      doorState = DoorStates::DOOR_OPEN;
+      led.blinkDefault();
+      motorCtrlDone();
+      //}
     }
   }
   if (doorState == DoorStates::DOOR_OPEN) {
@@ -295,27 +281,23 @@ int Controller::initOpen() {
 
 int Controller::initClose() {
   if (doorState == DoorStates::DOOR_OPEN) {
-    if (cmdState == CmdStates::IDLE) {
+    if (motorState == MotorDriveState::IDLE) {
       ESP_LOGI(CTRL_TAG, "Door needs to be closed in INIT mode. Closing door");
       led.setCurrentCfg(motorOpCfg);
-      ;
-      bool requestSuccess = motor.requestClose();
-      if (requestSuccess) {
-        cmdState = CmdStates::MOTOR_CTRL_CLOSE;
-      } else {
-        ESP_LOGW(CTRL_TAG, "Tried to request door close in INIT mode, but motor is busy");
-      }
+      closeDoor();
+      motorState = MotorDriveState::CLOSING;
     }
-    if (cmdState == CmdStates::MOTOR_CTRL_CLOSE) {
-      if (motor.operationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
-        if (doorswitch::opened()) {
-          ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
-        }
-        doorState = DoorStates::DOOR_CLOSE;
-        led.blinkDefault();
-        motorCtrlDone();
+    if (motorState == MotorDriveState::CLOSING) {
+      // TODO: Fix logic.
+      // if (motor.operationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
+      if (doorswitch::opened()) {
+        ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
       }
+      doorState = DoorStates::DOOR_CLOSE;
+      led.blinkDefault();
+      motorCtrlDone();
+      //}
     }
   }
   if (doorState == DoorStates::DOOR_CLOSE) {
@@ -366,7 +348,7 @@ void Controller::handleUartCommand(std::string cmd) {
       if (modeByte == CMD_MODE_MANUAL) {
         // Switch to manual control
         ESP_LOGI(CTRL_TAG, "Switching to manual mode");
-        if (cmdState != CmdStates::IDLE) {
+        if (motorState != MotorDriveState::IDLE) {
           ESP_LOGW(CTRL_TAG, "Can not switch to manual mode while door operation is pending");
           return;
         } else {
@@ -456,12 +438,8 @@ void Controller::handleUartCommand(std::string cmd) {
           forcedOp = true;
         }
         ESP_LOGI(CTRL_TAG, "Opening door in manual mode");
-        bool requestSuccess = motor.requestOpen();
-        if (requestSuccess) {
-          cmdState = CmdStates::MOTOR_CTRL_OPEN;
-        } else {
-          ESP_LOGW(CTRL_TAG, "Tried to request door open in MANUAL mode, but motor is busy");
-        }
+        openDoor();
+        motorState = MotorDriveState::OPENING;
       } else if (dirChar == CMD_MOTOR_CTRL_CLOSE) {
         if (protOn and doorState == DoorStates::DOOR_CLOSE) {
           ESP_LOGW(CTRL_TAG, "Door closing was requested but the door is already open");
@@ -470,13 +448,13 @@ void Controller::handleUartCommand(std::string cmd) {
         if (not protOn) {
           forcedOp = true;
         }
-        bool requestSuccess = motor.requestClose();
-        if (requestSuccess) {
-          ESP_LOGI(CTRL_TAG, "Requested to close door in manual mode");
-          cmdState = CmdStates::MOTOR_CTRL_CLOSE;
-        } else {
-          ESP_LOGW(CTRL_TAG, "Tried to request door close in MANUAL mode, but motor is busy");
-        }
+        closeDoor();
+        ESP_LOGI(CTRL_TAG, "Closing door in manual mode");
+        motorState = MotorDriveState::CLOSING;
+      } else if (dirChar == CMD_MOTOR_CTRL_STOP) {
+        ESP_LOGI(CTRL_TAG, "Stopping motor in manual mode");
+        motor::stop();
+        motorState = MotorDriveState::IDLE;
       }
     }
   }
@@ -500,11 +478,14 @@ void Controller::updateCurrentOpenCloseTimes(bool printTimes) {
   currentCloseDayMinutes = getDayMinutesFromHourAndMinute(closeHour, closeMinute);
 }
 
-bool Controller::motorStopCondition(Direction dir, uint8_t revIdx, void* args) {
+bool Controller::motorStopCondition(Direction dir, void* args) {
   Controller* ctrl = reinterpret_cast<Controller*>(args);
-  Direction openDir = dirMapper(false);
-  Direction closeDir = dirMapper(true);
-  bool result = false;
+  bool stop = false;
+  // if (dir == closeDir) {
+
+  //}
+  return stop;
+  /*
   if (dir == closeDir) {
     // Upper limit for closing
     if (revIdx == config::REVOLUTIONS_CLOSE_MAX) {
@@ -520,25 +501,7 @@ bool Controller::motorStopCondition(Direction dir, uint8_t revIdx, void* args) {
       result = true;
     }
   }
-  return result;
-}
-
-Direction Controller::dirMapper(bool close) {
-  Direction dir = Direction::CLOCK_WISE;
-  if (close) {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-    dir = Direction::CLOCK_WISE;
-#else
-    dir = Direction::COUNTER_CLOCK_WISE;
-#endif
-  } else {
-#if CONFIG_CLOCKWISE_IS_OPEN == 1
-    dir = Direction::COUNTER_CLOCK_WISE;
-#else
-    dir = Direction::CLOCK_WISE;
-#endif
-  }
-  return dir;
+  */
 }
 
 void Controller::setAppState(AppStates appState) { this->appState = appState; }
@@ -551,7 +514,7 @@ void Controller::motorCtrlDone() {
   } else {
     led.blinkDefault();
   }
-  cmdState = CmdStates::IDLE;
+  motorState = MotorDriveState::IDLE;
   if (forcedOp) {
     forcedOp = false;
   }
@@ -638,4 +601,15 @@ void Controller::resetToInitState() {
   appState = AppStates::INIT;
   openExecuted = false;
   closeExecuted = false;
+}
+
+void Controller::openDoor() { driveDoorMotor(false); }
+void Controller::closeDoor() { driveDoorMotor(true); }
+
+void Controller::driveDoorMotor(bool dir1) {
+#if CONFIG_INVERT_MOTOR_DIRECTION
+  motor::driveDir0();
+#else
+  motor::driveDir1();
+#endif
 }

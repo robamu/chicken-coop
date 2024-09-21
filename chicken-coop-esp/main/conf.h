@@ -15,15 +15,31 @@ static constexpr bool START_IN_MANUAL_MODE = true;
 static constexpr bool START_IN_MANUAL_MODE = false;
 #endif
 
-static constexpr unsigned int REVOLUTIONS_OPEN_MAX = CONFIG_CHICKEN_COOP_REVOLUTIONS;
-static constexpr unsigned int REVOLUTIONS_CLOSE_MAX = REVOLUTIONS_OPEN_MAX + 1;
 // Duration in seconds. Maximum value: 1000
 static constexpr uint32_t DEFAULT_FULL_OPEN_CLOSE_DURATION =
     CONFIG_DEFAULT_FULL_OPEN_CLOSE_DURATION;
 
 using OpenCloseToDirCb = Direction (*)(bool open);
 using StopConditionArgs = void*;
-using StopConditionCb = bool (*)(Direction dir, uint8_t revolutionIdx, StopConditionArgs args);
+using StopConditionCb = bool (*)(Direction dir, StopConditionArgs args);
+
+static inline Direction dirMapper(bool close) {
+  Direction dir = Direction::CLOCK_WISE;
+  if (close) {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+    dir = Direction::CLOCK_WISE;
+#else
+    dir = Direction::COUNTER_CLOCK_WISE;
+#endif
+  } else {
+#if CONFIG_CLOCKWISE_IS_OPEN == 1
+    dir = Direction::COUNTER_CLOCK_WISE;
+#else
+    dir = Direction::CLOCK_WISE;
+#endif
+  }
+  return dir;
+}
 
 }  // namespace config
 

@@ -22,7 +22,7 @@ C_HEADER_OUTPUT = "open_close_times.h"
 PYTHON_OUTPUT = "open_close_times.py"
 C_DEST_ESP = "../chicken-coop-esp/main"
 C_DEST_ARDUINO = "../chicken-coop-arduino/src"
-PY_DEST_RPI =  "../chicken-coop-pi"
+PY_DEST_RPI = "../chicken-coop-pi"
 MONTH_COMMENT = "Open-Close times specified as a 2D array for each month"
 MONTH_PREFIX = "OC_TIMES_"
 
@@ -69,8 +69,11 @@ def main():
         "-t", "--type", help="Output code language", choices=["c", "py"], default="c"
     )
     parser.add_argument(
-        "-c", "--copy", help="Copy files to destination directory", action="store_true",
-        default=False
+        "-c",
+        "--copy",
+        help="Copy files to destination directory",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
     print("-- Sun times to code generator --")
@@ -123,7 +126,7 @@ def gen_c_file(ocm):
     with open(f"{os.path.join(OUTPUT, C_SOURCE_OUTPUT)}", "w") as f:
         print_header_c(f)
         f.write("\n")
-        f.write("#include \"open_close_times.h\"\n")
+        f.write('#include "open_close_times.h"\n')
         f.write("\n")
         print_open_close_months_definition(f)
         f.write(f"// {MONTH_COMMENT}\n")
