@@ -60,7 +60,6 @@ void Controller::task() {
   ds3231_get_time(&i2c, &currentTime);
   strftime(timeBuf, sizeof(timeBuf) - 1, "%Y-%m-%d %H:%M:%S", &currentTime);
   ESP_LOGI(CTRL_TAG, "Detected current time: %s", timeBuf);
-  updateDoorState();
   if (doorswitch::opened()) {
     ESP_LOGI(CTRL_TAG, "Door is opened");
   } else {
@@ -90,8 +89,6 @@ void Controller::stateMachine() {
 
   // Handle all events
   handleUartReception();
-
-  updateDoorState();
 
   // INIT mode: System just came up and we need to check whether any operations are necessary
   // for the current time
@@ -214,7 +211,7 @@ void Controller::stateMachineNormal() {
   int minute = currentTime.tm_min;
   int dayMinutes = getDayMinutesFromHourAndMinute(hour, minute);
   if (not appParams.openExecutedForTheDay and dayMinutes >= currentOpenDayMinutes) {
-    if (doorState == DoorStates::DOOR_CLOSE) {
+    if (doorswitch::closed()) {
       // Motor control might already be pending
       if (motorState != MotorDriveState::OPENING) {
         ESP_LOGI(CTRL_TAG, "Opening door in IDLE mode");
@@ -238,7 +235,7 @@ void Controller::stateMachineNormal() {
 
   if ((not appParams.closeExecutedForTheDay and dayMinutes >= currentCloseDayMinutes) or
       recheckParams.recheckMode == RecheckState::RETRYING) {
-    if (doorState == DoorStates::DOOR_OPEN) {
+    if (doorswitch::opened()) {
       // Motor control might already be pending
       if (motorState != MotorDriveState::CLOSING) {
         ESP_LOGI(CTRL_TAG, "Closing door in NORMAL mode");
@@ -287,63 +284,43 @@ void Controller::initCloseDoor() {
 
 int Controller::initOpen() {
   // This needs to be executed in any case
-  if (doorState == DoorStates::DOOR_CLOSE) {
-    if (motorState == MotorDriveState::IDLE) {
-      ESP_LOGI(CTRL_TAG, "Door needs to be opened in INIT mode. Opening door");
-      led.setCurrentCfg(motorOpCfg);
-      openDoor();
-      motorState = MotorDriveState::OPENING;
-    }
-    if (motorState == MotorDriveState::OPENING) {
-      if (checkMotorOperationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
-        doorState = DoorStates::DOOR_OPEN;
-        led.blinkDefault();
-        motorCtrlDone();
-      }
-    }
+  if (motorState == MotorDriveState::IDLE) {
+    ESP_LOGI(CTRL_TAG, "Door needs to be opened in INIT mode. Opening door");
+    led.setCurrentCfg(motorOpCfg);
+    openDoor();
+    motorState = MotorDriveState::OPENING;
   }
-  if (doorState == DoorStates::DOOR_OPEN) {
-    // All ok
-    return 0;
+  if (motorState == MotorDriveState::OPENING) {
+    if (checkMotorOperationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door was opened in INIT mode");
+      led.blinkDefault();
+      motorCtrlDone();
+      return 0;
+    }
   }
   return 1;
 }
 
 int Controller::initClose() {
-  if (doorState == DoorStates::DOOR_OPEN) {
-    if (motorState == MotorDriveState::IDLE) {
-      ESP_LOGI(CTRL_TAG, "Door needs to be closed in INIT mode. Closing door");
-      led.setCurrentCfg(motorOpCfg);
-      closeDoor();
-      motorState = MotorDriveState::CLOSING;
-    }
-    if (motorState == MotorDriveState::CLOSING) {
-      if (checkMotorOperationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
-        if (doorswitch::opened()) {
-          ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
-        }
-        doorState = DoorStates::DOOR_CLOSE;
-        led.blinkDefault();
-        checkRecheckMechanism();
-        motorCtrlDone();
-      }
-    }
+  if (motorState == MotorDriveState::IDLE) {
+    ESP_LOGI(CTRL_TAG, "Door needs to be closed in INIT mode. Closing door");
+    led.setCurrentCfg(motorOpCfg);
+    closeDoor();
+    motorState = MotorDriveState::CLOSING;
   }
-  if (doorState == DoorStates::DOOR_CLOSE) {
-    // All ok
-    return 0;
+  if (motorState == MotorDriveState::CLOSING) {
+    if (checkMotorOperationDone()) {
+      ESP_LOGI(CTRL_TAG, "Door was closed in INIT mode");
+      if (doorswitch::opened()) {
+        ESP_LOGW(CTRL_TAG, "Door should be closed but is opened according to switch");
+      }
+      led.blinkDefault();
+      checkRecheckMechanism();
+      motorCtrlDone();
+      return 0;
+    }
   }
   return 1;
-}
-
-void Controller::updateDoorState() {
-  if (doorswitch::opened()) {
-    doorState = DoorStates::DOOR_OPEN;
-  } else {
-    doorState = DoorStates::DOOR_CLOSE;
-  }
 }
 
 void Controller::handleUartCommand(std::string cmd) {
@@ -404,7 +381,7 @@ void Controller::handleUartCommand(std::string cmd) {
       char printChar = rawCmd[3];
       if (printChar == static_cast<char>(RequestCmds::TIME)) {
         size_t strLen = strftime(timeBuf, sizeof(timeBuf) - 1, "%Y-%m-%d %H:%M:%S", &currentTime);
-        ESP_LOGI(CTRL_TAG, "Current time %s was reqeusted", timeBuf);
+        ESP_LOGI(CTRL_TAG, "Current time %s was requested", timeBuf);
         size_t currentIdx = 0;
         UART_REPLY_BUF[currentIdx] = PATTERN_CHAR;
         currentIdx++;
@@ -464,7 +441,7 @@ void Controller::handleUartCommand(std::string cmd) {
         return;
       }
       if (dirChar == CMD_MOTOR_CTRL_OPEN) {
-        if (protOn and doorState == DoorStates::DOOR_OPEN) {
+        if (protOn and doorswitch::opened()) {
           ESP_LOGW(CTRL_TAG, "Door opening was requested but the door is already open");
           return;
         }
@@ -475,7 +452,7 @@ void Controller::handleUartCommand(std::string cmd) {
         openDoor();
         motorState = MotorDriveState::OPENING;
       } else if (dirChar == CMD_MOTOR_CTRL_CLOSE) {
-        if (protOn and doorState == DoorStates::DOOR_CLOSE) {
+        if (protOn and doorswitch::closed()) {
           ESP_LOGW(CTRL_TAG, "Door closing was requested but the door is already open");
           return;
         }

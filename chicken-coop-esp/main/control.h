@@ -65,7 +65,7 @@ class Controller {
     UNKNOWN,
     DOOR_OPEN,
     DOOR_CLOSE,
-  } doorState = DoorStates::UNKNOWN;
+  };
 
   enum class MotorDriveState {
     IDLE,
@@ -143,7 +143,6 @@ class Controller {
   // This is the regular normal mode after the init mode has completed.
   void stateMachineNormal();
 
-  void updateDoorState();
   void updateCurrentDayAndMonth();
   void updateCurrentOpenCloseTimes(bool printTimes);
   int initOpen();
