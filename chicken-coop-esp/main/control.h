@@ -154,6 +154,7 @@ class Controller {
   void openDoor();
   void closeDoor();
   void driveDoorMotor(bool dir1);
+  void checkRecheckMechanism();
 
   /**
    * Call before starting the controller task!

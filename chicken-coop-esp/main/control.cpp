@@ -111,7 +111,7 @@ void Controller::stateMachine() {
     }
     int result = stateMachineInit();
     if (result == 0) {
-      ESP_LOGI(CTRL_TAG, "Going to IDLE mode");
+      ESP_LOGI(CTRL_TAG, "Going to NORMAL mode");
       led.setCurrentCfg(normalCfg);
       // Ensure consistent state, no matter what the FSM did.
       motorCtrlDone();
@@ -251,6 +251,7 @@ void Controller::stateMachineNormal() {
         if (doorswitch::opened()) {
           ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
         }
+        checkRecheckMechanism();
         motorCtrlDone();
         appParams.closeExecutedForTheDay = true;
       }
@@ -325,6 +326,7 @@ int Controller::initClose() {
         }
         doorState = DoorStates::DOOR_CLOSE;
         led.blinkDefault();
+        checkRecheckMechanism();
         motorCtrlDone();
       }
     }
@@ -539,6 +541,12 @@ void Controller::motorCtrlDone() {
   } else {
     led.blinkDefault();
   }
+  motor::stop();
+  motorState = MotorDriveState::IDLE;
+  forcedOp = false;
+}
+
+void Controller::checkRecheckMechanism() {
   if (motorState == MotorDriveState::CLOSING) {
     if (recheckParams.recheckMode == RecheckState::ARMED) {
       ESP_LOGI(CTRL_TAG, "Door Recheck: Door closed, rechecking soon");
@@ -548,11 +556,6 @@ void Controller::motorCtrlDone() {
     if (recheckParams.recheckMode == RecheckState::RETRYING) {
       recheckParams.recheckMode = RecheckState::IDLE;
     }
-  }
-  motor::stop();
-  motorState = MotorDriveState::IDLE;
-  if (forcedOp) {
-    forcedOp = false;
   }
 }
 
