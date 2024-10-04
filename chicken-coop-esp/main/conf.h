@@ -15,6 +15,8 @@ static constexpr bool START_IN_MANUAL_MODE = true;
 static constexpr bool START_IN_MANUAL_MODE = false;
 #endif
 
+static constexpr uint32_t START_DELAY_MS = 4000;
+
 static constexpr uint32_t OPEN_DURATION_MS = 150 * 1000;
 static constexpr uint32_t MAX_CLOSE_DURATION = OPEN_DURATION_MS + 10 * 1000;
 

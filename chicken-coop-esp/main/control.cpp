@@ -26,12 +26,18 @@ Controller::Controller(Led& led, AppStates initState) : led(led), appState(initS
   motorOpCfg.brightness = 64;
   motorOpCfg.color = Colors::GREEN;
   motorOpCfg.periodMs = 200;
-  idleCfg.brightness = 64;
-  idleCfg.color = Colors::WHITE_DIM;
-  idleCfg.periodMs = BLINK_PERIOD_IDLE;
+
+  normalCfg.brightness = 64;
+  normalCfg.color = Colors::WHITE_DIM;
+  normalCfg.periodMs = BLINK_PERIOD_NORMAL;
+
   initCfg.brightness = 64;
   initCfg.color = Colors::WHITE_DIM;
   initCfg.periodMs = BLINK_PERIOD_INIT;
+
+  manualCfg.brightness = 64;
+  manualCfg.color = Colors::YELLOW;
+  manualCfg.periodMs = BLINK_PERIOD_MANUAL;
 }
 
 void Controller::preTaskInit() {
@@ -63,12 +69,12 @@ void Controller::task() {
   startTime = xTaskGetTickCount();
   if (appState == AppStates::START_DELAY) {
     ESP_LOGI(CTRL_TAG, "Waiting for %lu seconds before going into initialization mode..",
-             START_DELAY_MS / 1000);
+             config::START_DELAY_MS / 1000);
   }
   while (true) {
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_task_wdt_reset());
     stateMachine();
-    vTaskDelay(200);
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
@@ -90,7 +96,7 @@ void Controller::stateMachine() {
   // INIT mode: System just came up and we need to check whether any operations are necessary
   // for the current time
   if (appState == AppStates::START_DELAY) {
-    if (pdTICKS_TO_MS(xTaskGetTickCount() - startTime) > START_DELAY_MS) {
+    if (pdTICKS_TO_MS(xTaskGetTickCount() - startTime) > config::START_DELAY_MS) {
       ESP_LOGI(CTRL_TAG, "Going into INIT mode");
       appState = AppStates::INIT;
     } else {
@@ -106,7 +112,7 @@ void Controller::stateMachine() {
     int result = stateMachineInit();
     if (result == 0) {
       ESP_LOGI(CTRL_TAG, "Going to IDLE mode");
-      led.setCurrentCfg(idleCfg);
+      led.setCurrentCfg(normalCfg);
       // Ensure consistent state, no matter what the FSM did.
       motorCtrlDone();
       // If everything is done
@@ -161,8 +167,8 @@ int Controller::stateMachineInit() {
     // Case 1. Close the door if not already done
     result = initClose();
     if (result == 0) {
-      openExecuted = false;
-      closeExecuted = false;
+      appParams.openExecutedForTheDay = false;
+      appParams.closeExecutedForTheDay = false;
       // Both operations needs to be performed in the IDLE mode, INIT mode done
       ESP_LOGI(CTRL_TAG, "Door needs to be both opened and closed for this day");
     }
@@ -171,16 +177,16 @@ int Controller::stateMachineInit() {
     // Case 2
     result = initOpen();
     if (result == 0) {
-      openExecuted = true;
-      closeExecuted = false;
+      appParams.openExecutedForTheDay = true;
+      appParams.closeExecutedForTheDay = false;
     }
     return result;
   } else if (dayMinutes >= currentCloseDayMinutes) {
     // Case 3
     result = initClose();
     if (result == 0) {
-      openExecuted = true;
-      closeExecuted = true;
+      appParams.openExecutedForTheDay = true;
+      appParams.closeExecutedForTheDay = true;
     }
     return result;
   }
@@ -198,8 +204,8 @@ void Controller::stateMachineNormal() {
   // new day has started. Each day, open and close need to be executed once for now
   if (day != currentDay) {
     currentDay = day;
-    openExecuted = false;
-    closeExecuted = false;
+    appParams.openExecutedForTheDay = false;
+    appParams.closeExecutedForTheDay = false;
     ESP_LOGI(CTRL_TAG, "New day has started. Assigning new opening and closing times");
     updateCurrentOpenCloseTimes(true);
   }
@@ -207,7 +213,7 @@ void Controller::stateMachineNormal() {
   int hour = currentTime.tm_hour;
   int minute = currentTime.tm_min;
   int dayMinutes = getDayMinutesFromHourAndMinute(hour, minute);
-  if (not openExecuted and dayMinutes >= currentOpenDayMinutes) {
+  if (not appParams.openExecutedForTheDay and dayMinutes >= currentOpenDayMinutes) {
     if (doorState == DoorStates::DOOR_CLOSE) {
       // Motor control might already be pending
       if (motorState != MotorDriveState::OPENING) {
@@ -225,12 +231,13 @@ void Controller::stateMachineNormal() {
           motor::stop();
         }
         motorCtrlDone();
-        openExecuted = true;
+        appParams.openExecutedForTheDay = true;
       }
     }
   }
 
-  if (not closeExecuted and dayMinutes >= currentCloseDayMinutes) {
+  if ((not appParams.closeExecutedForTheDay and dayMinutes >= currentCloseDayMinutes) or
+      recheckParams.recheckMode == RecheckState::RETRYING) {
     if (doorState == DoorStates::DOOR_OPEN) {
       // Motor control might already be pending
       if (motorState != MotorDriveState::CLOSING) {
@@ -245,26 +252,26 @@ void Controller::stateMachineNormal() {
           ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
         }
         motorCtrlDone();
-        closeExecuted = true;
+        appParams.closeExecutedForTheDay = true;
       }
     }
   }
 
   if (recheckParams.recheckMode == RecheckState::RECHECKING) {
-    if (pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeMs) >= 2000) {
+    if (pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeTicks) >= 2000) {
       if (!doorswitch::closed()) {
         ESP_LOGI(CTRL_TAG, "Closing Recheck: Door not closed, re-trying");
-        motorState = MotorDriveState::CLOSING;
+        recheckParams.recheckMode = RecheckState::RETRYING;
         initCloseDoor();
       } else {
         ESP_LOGI(CTRL_TAG, "Closing Recheck: Door is closed, OK");
+        recheckParams.recheckMode = RecheckState::IDLE;
       }
-      recheckParams.recheckMode = RecheckState::IDLE;
     }
   }
   // The recheck timer is rearmed after the close duration
   if (recheckParams.recheckMode == RecheckState::IDLE &&
-      pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeMs) >
+      pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeTicks) >
           config::MAX_CLOSE_DURATION * 2) {
     ESP_LOGI(CTRL_TAG, "Closing Recheck: Rearming");
     recheckParams.recheckMode = RecheckState::ARMED;
@@ -370,6 +377,7 @@ void Controller::handleUartCommand(std::string cmd) {
       if (modeByte == CMD_MODE_MANUAL) {
         // Switch to manual control
         ESP_LOGI(CTRL_TAG, "Switching to manual mode");
+        led.setCurrentCfg(manualCfg);
         if (motorState != MotorDriveState::IDLE) {
           ESP_LOGW(CTRL_TAG, "Can not switch to manual mode while door operation is pending");
           return;
@@ -378,6 +386,7 @@ void Controller::handleUartCommand(std::string cmd) {
         }
       } else if (modeByte == CMD_MODE_NORMAL) {
         ESP_LOGI(CTRL_TAG, "Switching to normal mode");
+        led.setCurrentCfg(initCfg);
         resetToInitState();
       } else {
         ESP_LOGW(CTRL_TAG, "Invalid mode specifier %c detected, M (manual) and N (normal) allowed",
@@ -513,9 +522,6 @@ bool Controller::checkMotorOperationDone() {
     }
   }
   if (motorState == MotorDriveState::OPENING) {
-    ESP_LOGI(CTRL_TAG, "tick count: %lu", xTaskGetTickCount());
-    ESP_LOGI(CTRL_TAG, "start time: %lu", motorStartTime);
-    // Check upper limit run time. TODO: Use named constant
     if (pdTICKS_TO_MS(xTaskGetTickCount() - motorStartTime) >= config::OPEN_DURATION_MS) {
       return true;
     }
@@ -527,7 +533,7 @@ void Controller::setAppState(AppStates appState) { this->appState = appState; }
 
 void Controller::motorCtrlDone() {
   if (appState == AppStates::NORMAL) {
-    led.setCurrentCfg(idleCfg);
+    led.setCurrentCfg(normalCfg);
   } else if (appState == AppStates::INIT) {
     led.setCurrentCfg(initCfg);
   } else {
@@ -537,7 +543,10 @@ void Controller::motorCtrlDone() {
     if (recheckParams.recheckMode == RecheckState::ARMED) {
       ESP_LOGI(CTRL_TAG, "Door Recheck: Door closed, rechecking soon");
       recheckParams.recheckMode = RecheckState::RECHECKING;
-      recheckParams.recheckStartTimeMs = xTaskGetTickCount();
+      recheckParams.recheckStartTimeTicks = xTaskGetTickCount();
+    }
+    if (recheckParams.recheckMode == RecheckState::RETRYING) {
+      recheckParams.recheckMode = RecheckState::IDLE;
     }
   }
   motor::stop();
@@ -627,8 +636,8 @@ int Controller::getDayMinutesFromHourAndMinute(int hour, int minute) { return ho
 
 void Controller::resetToInitState() {
   appState = AppStates::INIT;
-  openExecuted = false;
-  closeExecuted = false;
+  appParams.openExecutedForTheDay = false;
+  appParams.closeExecutedForTheDay = false;
 }
 
 void Controller::openDoor() { driveDoorMotor(false); }

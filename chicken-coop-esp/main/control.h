@@ -35,8 +35,6 @@ class Controller {
   static constexpr gpio_num_t DOOR_SWITCH_PORT =
       static_cast<gpio_num_t>(CONFIG_DOOR_SWITCH_STATE_PORT);
 
-  static constexpr uint32_t START_DELAY_MS = 3000;
-
   static constexpr char CTRL_TAG[] = "ctrl";
   static constexpr char PATTERN_CHAR = 'C';
 
@@ -59,8 +57,9 @@ class Controller {
   static constexpr char CMD_MOTOR_CTRL_CLOSE = 'C';
   static constexpr char CMD_MOTOR_CTRL_STOP = 'S';
 
-  static constexpr uint32_t BLINK_PERIOD_IDLE = 5000;
+  static constexpr uint32_t BLINK_PERIOD_NORMAL = 6000;
   static constexpr uint32_t BLINK_PERIOD_INIT = 3000;
+  static constexpr uint32_t BLINK_PERIOD_MANUAL = 1000;
 
   enum class DoorStates {
     UNKNOWN,
@@ -76,15 +75,21 @@ class Controller {
 
   Led& led;
 
+  struct AppParams {
+    bool openExecutedForTheDay = false;
+    bool closeExecutedForTheDay = false;
+  } appParams;
+
   enum class RecheckState {
     IDLE,
     ARMED,
+    RETRYING,
     RECHECKING,
   };
 
   struct RecheckParameter {
     RecheckState recheckMode = RecheckState::ARMED;
-    uint32_t recheckStartTimeMs = 0;
+    uint32_t recheckStartTimeTicks = 0;
     // Not used currently.
     uint32_t recheckCounter = 0;
   } recheckParams;
@@ -105,15 +110,15 @@ class Controller {
   TickType_t motorStartTime = 0;
   i2c_dev_t i2c = {};
   LedCfg motorOpCfg;
-  LedCfg idleCfg;
+  LedCfg normalCfg;
   LedCfg initCfg;
+  LedCfg manualCfg;
+
   char timeBuf[64] = {};
 
   tm currentTime = {};
 
   bool initPrintSwitch = true;
-  bool openExecuted = false;
-  bool closeExecuted = false;
   bool forcedOp = false;
 
   // Day from 0 to 30
