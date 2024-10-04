@@ -12,6 +12,7 @@ static constexpr uint64_t GPIO_MASK = (1ULL << DIR_0_PIN) | (1ULL << DIR_1_PIN);
 
 void init();
 
+void driveDir(bool dir);
 void driveDir0();
 void driveDir1();
 void stop();

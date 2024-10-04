@@ -18,9 +18,17 @@ void motor::init() {
   gpio_set_level(DIR_1_PIN, 0);
 }
 
+void motor::driveDir(bool dir) {
+  if (dir) {
+    driveDir1();
+  } else {
+    driveDir0();
+  }
+}
+
 void motor::driveDir0() {
-  gpio_set_level(DIR_1_PIN, 0);
   gpio_set_level(DIR_0_PIN, 1);
+  gpio_set_level(DIR_1_PIN, 0);
 }
 
 void motor::driveDir1() {

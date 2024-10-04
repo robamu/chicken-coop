@@ -68,9 +68,27 @@ class Controller {
     DOOR_CLOSE,
   } doorState = DoorStates::UNKNOWN;
 
-  enum class MotorDriveState { IDLE, OPENING, CLOSING } motorState = MotorDriveState::IDLE;
+  enum class MotorDriveState {
+    IDLE,
+    OPENING,
+    CLOSING,
+  } motorState = MotorDriveState::IDLE;
 
   Led& led;
+
+  enum class RecheckState {
+    IDLE,
+    ARMED,
+    RECHECKING,
+  };
+
+  struct RecheckParameter {
+    RecheckState recheckMode = RecheckState::ARMED;
+    uint32_t recheckStartTimeMs = 0;
+    // Not used currently.
+    uint32_t recheckCounter = 0;
+  } recheckParams;
+
   AppStates appState = AppStates::INIT;
   TaskHandle_t taskHandle = nullptr;
   static constexpr uart_port_t UART_NUM = UART_NUM_1;
@@ -126,6 +144,7 @@ class Controller {
   int initOpen();
   int initClose();
   void motorCtrlDone();
+  void initCloseDoor();
 
   void openDoor();
   void closeDoor();

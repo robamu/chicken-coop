@@ -15,9 +15,8 @@ static constexpr bool START_IN_MANUAL_MODE = true;
 static constexpr bool START_IN_MANUAL_MODE = false;
 #endif
 
-// Duration in seconds. Maximum value: 1000
-static constexpr uint32_t DEFAULT_FULL_OPEN_CLOSE_DURATION =
-    CONFIG_DEFAULT_FULL_OPEN_CLOSE_DURATION;
+static constexpr uint32_t OPEN_DURATION_MS = 150 * 1000;
+static constexpr uint32_t MAX_CLOSE_DURATION = OPEN_DURATION_MS + 10 * 1000;
 
 using OpenCloseToDirCb = Direction (*)(bool open);
 using StopConditionArgs = void*;

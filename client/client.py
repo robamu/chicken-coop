@@ -249,7 +249,7 @@ def req_handle_cmd(ser: serial.Serial):
         request_cmd_num = int(request_cmd)
     if request_cmd_num in [CmdIndex.MAN_CTRL]:
         cmd = CmdIndex(request_cmd_num)
-        print(f"{CMD_INFO[cmd][1]}")
+        print(f"{CMD_INFO[cmd][1][0]}")
         cmd_str = CMD_PATTERN + CommandChars.MODE + CMD_MODE_MANUAL + CMD_TERMINATION
     elif request_cmd_num in [CmdIndex.PING]:
         cmd = CmdIndex(request_cmd_num)

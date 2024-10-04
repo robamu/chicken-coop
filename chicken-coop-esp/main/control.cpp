@@ -219,7 +219,7 @@ void Controller::stateMachineNormal() {
     }
     if (motorState == MotorDriveState::OPENING) {
       if (checkMotorOperationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door opening operation in IDLE mode done");
+        ESP_LOGI(CTRL_TAG, "Door opening operation in NORMAL mode done");
         if (doorswitch::closed()) {
           ESP_LOGW(CTRL_TAG, "Door should be opened but is closed according to switch");
           motor::stop();
@@ -234,15 +234,13 @@ void Controller::stateMachineNormal() {
     if (doorState == DoorStates::DOOR_OPEN) {
       // Motor control might already be pending
       if (motorState != MotorDriveState::CLOSING) {
-        ESP_LOGI(CTRL_TAG, "Closing door in IDLE mode");
-        led.setCurrentCfg(motorOpCfg);
-        closeDoor();
-        motorState = MotorDriveState::CLOSING;
+        ESP_LOGI(CTRL_TAG, "Closing door in NORMAL mode");
+        initCloseDoor();
       }
     }
     if (motorState == MotorDriveState::CLOSING) {
       if (checkMotorOperationDone()) {
-        ESP_LOGI(CTRL_TAG, "Door closing operation in IDLE mode done");
+        ESP_LOGI(CTRL_TAG, "Door closing operation in NORMAL mode done");
         if (doorswitch::opened()) {
           ESP_LOGW(CTRL_TAG, "Door should be closed but is open according to switch");
         }
@@ -251,6 +249,32 @@ void Controller::stateMachineNormal() {
       }
     }
   }
+
+  if (recheckParams.recheckMode == RecheckState::RECHECKING) {
+    if (pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeMs) >= 2000) {
+      if (!doorswitch::closed()) {
+        ESP_LOGI(CTRL_TAG, "Closing Recheck: Door not closed, re-trying");
+        motorState = MotorDriveState::CLOSING;
+        initCloseDoor();
+      } else {
+        ESP_LOGI(CTRL_TAG, "Closing Recheck: Door is closed, OK");
+      }
+      recheckParams.recheckMode = RecheckState::IDLE;
+    }
+  }
+  // The recheck timer is rearmed after the close duration
+  if (recheckParams.recheckMode == RecheckState::IDLE &&
+      pdTICKS_TO_MS(xTaskGetTickCount() - recheckParams.recheckStartTimeMs) >
+          config::MAX_CLOSE_DURATION * 2) {
+    ESP_LOGI(CTRL_TAG, "Closing Recheck: Rearming");
+    recheckParams.recheckMode = RecheckState::ARMED;
+  }
+}
+
+void Controller::initCloseDoor() {
+  led.setCurrentCfg(motorOpCfg);
+  closeDoor();
+  motorState = MotorDriveState::CLOSING;
 }
 
 int Controller::initOpen() {
@@ -411,12 +435,6 @@ void Controller::handleUartCommand(std::string cmd) {
       break;
     }
     case (Cmds::MOTOR_CTRL): {
-      if (appState != AppStates::MANUAL) {
-        ESP_LOGW(CTRL_TAG,
-                 "Received motor control command but not in manual mode. "
-                 "Activate manual mode first");
-        return;
-      }
       if (cmd.length() < 5) {
         ESP_LOGW(CTRL_TAG, "Invalid motor control command detected");
         return;
@@ -427,6 +445,13 @@ void Controller::handleUartCommand(std::string cmd) {
         protOn = false;
       }
       char dirChar = rawCmd[4];
+
+      if (appState != AppStates::MANUAL and dirChar != CMD_MOTOR_CTRL_STOP) {
+        ESP_LOGW(CTRL_TAG,
+                 "Received motor control command but not in manual mode. "
+                 "Activate manual mode first");
+        return;
+      }
       if (dirChar == CMD_MOTOR_CTRL_OPEN) {
         if (protOn and doorState == DoorStates::DOOR_OPEN) {
           ESP_LOGW(CTRL_TAG, "Door opening was requested but the door is already open");
@@ -481,8 +506,7 @@ bool Controller::checkMotorOperationDone() {
     return true;
   }
   if (motorState == MotorDriveState::CLOSING) {
-    // Check upper limit run time. TODO: Use named constant
-    if (pdTICKS_TO_MS(xTaskGetTickCount() - motorStartTime) > 5000) {
+    if (pdTICKS_TO_MS(xTaskGetTickCount() - motorStartTime) >= config::MAX_CLOSE_DURATION) {
       return true;
     } else if (not forcedOp) {
       return doorswitch::closed();
@@ -492,29 +516,12 @@ bool Controller::checkMotorOperationDone() {
     ESP_LOGI(CTRL_TAG, "tick count: %lu", xTaskGetTickCount());
     ESP_LOGI(CTRL_TAG, "start time: %lu", motorStartTime);
     // Check upper limit run time. TODO: Use named constant
-    if (pdTICKS_TO_MS(xTaskGetTickCount() - motorStartTime) >= 5000) {
+    if (pdTICKS_TO_MS(xTaskGetTickCount() - motorStartTime) >= config::OPEN_DURATION_MS) {
       return true;
     }
   }
   return false;
 }
-/*
-if (dir == closeDir) {
-  // Upper limit for closing
-  if (revIdx == config::REVOLUTIONS_CLOSE_MAX) {
-    result = true;
-  } else {
-    if (not ctrl->forcedOp) {
-      // Default condition for closing
-      result = doorswitch::closed();
-    }
-  }
-} else if (dir == openDir) {
-  if (revIdx == config::REVOLUTIONS_OPEN_MAX) {
-    result = true;
-  }
-}
-*/
 
 void Controller::setAppState(AppStates appState) { this->appState = appState; }
 
@@ -525,6 +532,13 @@ void Controller::motorCtrlDone() {
     led.setCurrentCfg(initCfg);
   } else {
     led.blinkDefault();
+  }
+  if (motorState == MotorDriveState::CLOSING) {
+    if (recheckParams.recheckMode == RecheckState::ARMED) {
+      ESP_LOGI(CTRL_TAG, "Door Recheck: Door closed, rechecking soon");
+      recheckParams.recheckMode = RecheckState::RECHECKING;
+      recheckParams.recheckStartTimeMs = xTaskGetTickCount();
+    }
   }
   motor::stop();
   motorState = MotorDriveState::IDLE;
@@ -627,8 +641,8 @@ void Controller::driveDoorMotor(bool dir1) {
     motorStartTime = xTaskGetTickCount();
   }
 #if CONFIG_INVERT_MOTOR_DIRECTION
-  motor::driveDir0();
+  motor::driveDir(!dir1);
 #else
-  motor::driveDir1();
+  motor::driveDir(dir1);
 #endif
 }
