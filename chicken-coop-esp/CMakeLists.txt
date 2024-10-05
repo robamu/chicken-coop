@@ -33,6 +33,6 @@ project(chicken-coop-esp)
 
 set(APP_VERSION_MAJOR 1)
 set(APP_VERSION_MINOR 0)
-set(APP_VERSION_REVISION 0)
+set(APP_VERSION_REVISION 1)
 
 configure_file(main/usr_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/usr_config.h)
