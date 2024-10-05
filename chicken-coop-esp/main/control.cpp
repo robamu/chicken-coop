@@ -160,6 +160,9 @@ int Controller::stateMachineInit() {
   int minute = currentTime.tm_min;
   int dayMinutes = getDayMinutesFromHourAndMinute(hour, minute);
 
+  // TODO: This should be updated to be more reliable in the case that an operation starts
+  // shortly before going from one case to another case. The easiest way would be to model and
+  // cache the case type and keep executing the case until it is finished.
   if (dayMinutes < currentOpenDayMinutes) {
     // Case 1. Close the door if not already done
     result = initClose();
